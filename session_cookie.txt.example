@@ -1,0 +1,12 @@
+# MiMo Session Cookie
+# 
+# Cara dapatkan cookie:
+# 1. Buka https://aistudio.xiaomimimo.com
+# 2. Login dengan akun Xiaomi
+# 3. Buka DevTools (F12) -> Application -> Cookies
+# 4. Copy seluruh string cookie
+# 5. Paste di bawah ini (atau set env XIAOMI_COOKIE)
+#
+# Format: serviceToken="xxx"; xiaomichatbot_ph="xxx"; ...
+#
+# PASTE COOKIE DI SINI:

@@ -1,0 +1,37 @@
+# Sensitive files
+session_cookie.txt
+memory.json
+*.log
+conversation_*.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Browser data
+/tmp/
+*.png
+*.jpg
+
+# History
+.mimo_agent_history
