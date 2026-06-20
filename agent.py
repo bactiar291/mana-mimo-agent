@@ -320,7 +320,7 @@ RULES:
     ┌──────────────┬──────────────┐
     │ Label        │ Value        │
     ├──────────────┼──────────────┤
-    │ Username     │ @Gendot6449  │
+    │ Username     │ @Gxxxxxxxxx  │
     │ Followers    │ 71           │
     └──────────────┴──────────────┘
 11. Use plain text lists with arrows: -> item, => important, * bullet
