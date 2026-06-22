@@ -24,32 +24,50 @@ Powered by MiMo v2.5 Pro via session cookie — **unlimited usage, zero cost.**
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start — Step by Step
 
-### Step 1: Get Session Cookie (FREE — No API Key!)
+### Step 1: Get MiMo Session Cookie (FREE — No API Key!)
 
 MiMo Agent uses MiMo v2.5 Pro via session cookie — **completely free, no API key required, unlimited usage.**
 
-**How to get the session cookie:**
+**Detailed Instructions:**
 
-1. Open [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/) in your browser
-2. Log in with your Xiaomi account (create one if needed)
-3. Press **F12** to open DevTools
-4. Go to **Application** tab → **Cookies** → `https://aistudio.xiaomimimo.com`
-5. Find and copy these values:
-   - `session` — this is your main session token
-   - `user` — your user ID (optional but recommended)
-6. **Save these values** — you'll need them in Step 3
+1. Open your browser (Chrome recommended)
+2. Go to [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/)
+3. Log in with your Xiaomi account
+   - Don't have one? Click "Sign Up" and create a free Xiaomi account
+4. Once logged in, press **F12** (or right-click → "Inspect") to open DevTools
+5. Click the **Application** tab at the top of DevTools
+6. In the left sidebar, find **Cookies** → click the dropdown
+7. Click on `https://aistudio.xiaomimimo.com`
+8. You'll see a list of cookies. Find these two:
 
-> ⚠️ **Important:** The session cookie expires after some time. If the agent stops working, repeat Step 1 to get a fresh cookie.
+| Cookie Name | What to Copy |
+|-------------|-------------|
+| `session` | The long string value — this is your main session token |
+| `user` | Your user ID (optional but recommended) |
+
+9. **Right-click** on the cookie value → **Copy Value**
+10. **Save these values somewhere safe** — you'll need them in Step 3
+
+> ⚠️ **Important Notes:**
+> - The session cookie **expires after some time** (usually days/weeks)
+> - If the agent stops responding or gives auth errors, repeat Step 1 to get a fresh cookie
+> - Never share your session cookie with anyone — it gives full access to your MiMo account
+> - The cookie is a long string starting with something like `eyJ...` or similar
 
 ### Step 2: Create Telegram Bot
 
-1. Open Telegram → search [@BotFather](https://t.me/BotFather)
-2. Send `/newbot`
-3. Enter a name for your bot (e.g., "My AI Assistant")
-4. Enter a username (must end with "bot", e.g., "my_assistant_bot")
-5. **Copy the bot token** — looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+1. Open Telegram on your phone or desktop
+2. Search for [@BotFather](https://t.me/BotFather) (verified bot with blue checkmark)
+3. Send `/newbot` command
+4. BotFather will ask for a **name** — enter anything (e.g., "My AI Assistant")
+5. Then ask for a **username** — must end with "bot" (e.g., "my_assistant_bot")
+6. BotFather will reply with your **bot token** — looks like:
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+7. **Copy this token** and save it
 
 ### Step 3: Install & Configure
 
@@ -58,7 +76,7 @@ MiMo Agent uses MiMo v2.5 Pro via session cookie — **completely free, no API k
 git clone https://github.com/bactiar291/mimo-agent.git
 cd mimo-agent
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
 # Create .env file with your credentials
@@ -69,17 +87,31 @@ TELEGRAM_BOT_TOKEN=paste_your_bot_token_here
 EOF
 ```
 
+**Example .env file:**
+```
+MIMO_SESSION=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+MIMO_USER=12345678
+TELEGRAM_BOT_TOKEN=7123456789:AAH_xxxxxxxxxxxxxxxxxxxxxxx
+```
+
 ### Step 4: Run
 
 ```bash
 # Run in Telegram mode (recommended)
 python start_tg.py
 
-# Or run in CLI mode
+# Or run in CLI mode (terminal chat)
 python core/agent.py
 ```
 
-**That's it!** Open Telegram, find your bot, and start chatting. The agent has full access to 204+ tools and will execute any task you give it.
+### Step 5: Start Using
+
+1. Open Telegram
+2. Find your bot (the one you created in Step 2)
+3. Send any message — "Hello", "What can you do?", "Search the web for..."
+4. The agent will respond and use tools as needed
+
+**That's it!** You now have a personal AI assistant with 204+ tools, unlimited usage, and zero cost.
 
 ---
 
