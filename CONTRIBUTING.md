@@ -1,75 +1,28 @@
 # Contributing to MiMo Agent
 
-Thank you for your interest in contributing to MiMo Agent! 🎉
+Welcome! We're glad you want to contribute.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/mimo-agent.git`
-3. Create a branch: `git checkout -b feature/your-feature`
+2. Clone your fork
+3. Create a feature branch
 4. Make your changes
-5. Test thoroughly
-6. Commit: `git commit -m "Add your feature"`
-7. Push: `git push origin feature/your-feature`
-8. Open a Pull Request
+5. Submit a Pull Request
 
 ## What Can I Contribute?
 
-### 🔧 New Tools
-Add new capabilities to the agent. Each tool is a self-contained module in `tools/`.
-
-### 🐛 Bug Fixes
-Found a bug? Fix it and submit a PR. Include steps to reproduce the issue.
-
-### 📖 Documentation
-Improve README, add examples, write tutorials.
-
-### 🌐 Translations
-Help make MiMo Agent available in more languages.
-
-### ⚡ Performance
-Optimize code, reduce memory usage, improve speed.
-
-### 🔗 Integrations
-Connect MiMo Agent with new platforms and services.
+- **Code**: New tools, bug fixes, performance improvements
+- **Documentation**: README, code comments, tutorials
+- **Testing**: Unit tests, integration tests
+- **Ideas**: Feature requests, suggestions
 
 ## Code Guidelines
 
-- Follow PEP 8 for Python
-- Add docstrings to functions and classes
-- Write unit tests for new features
-- Keep commits focused and descriptive
-- Use meaningful variable names
-
-## Testing
-
-```bash
-# Run all tests
-python -m pytest tests/
-
-# Run specific test
-python -m pytest tests/test_tools.py
-
-# Run with coverage
-python -m pytest --cov=. tests/
-```
-
-## Reporting Issues
-
-When reporting bugs, please include:
-- Python version
-- Operating system
-- Steps to reproduce
-- Expected behavior
-- Actual behavior
-- Error messages/logs
-
-## Code of Conduct
-
-- Be respectful
-- Be constructive
-- Focus on the code, not the person
-- Help others learn
+- Python 3.10+
+- Use type hints
+- Write docstrings
+- Keep tools modular
 
 ## Questions?
 
@@ -77,4 +30,4 @@ Open an issue or start a discussion. We're here to help!
 
 ---
 
-Thank you for making MiMo Agent better! 🚀
+**No permission needed. Just build and submit.**

@@ -1,8 +1,8 @@
-# 🤖 MiMo Agent — Modular Agentic AI Assistant
+# 🤖 MiMo Agent — Unlimited AI Assistant
 
-**204 runtime-registered tools | ~14,108 LOC | 38 modules**
+**204+ tools | No API key needed | Free forever**
 
-Powered by MiMo v2.5 Pro via session cookie (no API key needed).
+Powered by MiMo v2.5 Pro via session cookie — **unlimited usage, zero cost.**
 
 > **By [Bactiar 291](https://github.com/bactiar291)** — Open source, free to use, contributions welcome!
 
@@ -26,21 +26,32 @@ Powered by MiMo v2.5 Pro via session cookie (no API key needed).
 
 ## 🚀 Quick Start
 
-### 1. Get Session Cookie (No API Key Needed!)
+### Step 1: Get Session Cookie (FREE — No API Key!)
 
-MiMo Agent uses MiMo v2.5 Pro via session cookie — **completely free**, no API key required.
+MiMo Agent uses MiMo v2.5 Pro via session cookie — **completely free, no API key required, unlimited usage.**
 
-**Step-by-step:**
+**How to get the session cookie:**
 
-1. Go to [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/)
-2. Log in with your Xiaomi account (or create one)
-3. Open DevTools (F12) → Application → Cookies
-4. Copy these two values:
-   - `session` — the session token
-   - `user` — the user ID (optional)
-5. Save them for the next step
+1. Open [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/) in your browser
+2. Log in with your Xiaomi account (create one if needed)
+3. Press **F12** to open DevTools
+4. Go to **Application** tab → **Cookies** → `https://aistudio.xiaomimimo.com`
+5. Find and copy these values:
+   - `session` — this is your main session token
+   - `user` — your user ID (optional but recommended)
+6. **Save these values** — you'll need them in Step 3
 
-### 2. Install & Configure
+> ⚠️ **Important:** The session cookie expires after some time. If the agent stops working, repeat Step 1 to get a fresh cookie.
+
+### Step 2: Create Telegram Bot
+
+1. Open Telegram → search [@BotFather](https://t.me/BotFather)
+2. Send `/newbot`
+3. Enter a name for your bot (e.g., "My AI Assistant")
+4. Enter a username (must end with "bot", e.g., "my_assistant_bot")
+5. **Copy the bot token** — looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+
+### Step 3: Install & Configure
 
 ```bash
 # Clone the repo
@@ -50,32 +61,25 @@ cd mimo-agent
 # Install dependencies
 pip install -r requirements.txt
 
-# Create .env file
+# Create .env file with your credentials
 cat > .env << 'EOF'
-MIMO_SESSION=your_session_cookie_here
-MIMO_USER=your_user_id_here
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+MIMO_SESSION=paste_your_session_cookie_here
+MIMO_USER=paste_your_user_id_here
+TELEGRAM_BOT_TOKEN=paste_your_bot_token_here
 EOF
 ```
 
-### 3. Set Up Telegram Bot
-
-1. Open Telegram → search [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` → follow instructions
-3. Copy the bot token
-4. Add it to your `.env` file as `TELEGRAM_BOT_TOKEN`
-
-### 4. Run
+### Step 4: Run
 
 ```bash
-# Run in Telegram mode
+# Run in Telegram mode (recommended)
 python start_tg.py
 
 # Or run in CLI mode
 python core/agent.py
 ```
 
-**That's it!** Your AI agent is now running in Telegram. Send any message and it will respond with full tool access.
+**That's it!** Open Telegram, find your bot, and start chatting. The agent has full access to 204+ tools and will execute any task you give it.
 
 ---
 
@@ -140,27 +144,34 @@ Edit `config.yaml` for:
 
 ---
 
-## 🤝 Contributing
+## 🤝 Contributing — Developers Welcome!
 
-**All contributions welcome!** This is an open-source project — anyone can add features, fix bugs, or improve documentation.
+**This is an open-source project. Anyone can contribute!**
+
+Whether you're a beginner or an experienced developer, your contributions are valued. Help us make MiMo Agent better for everyone.
 
 ### How to Contribute
 
 1. **Fork** this repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
+2. **Clone** your fork (`git clone https://github.com/YOUR_USERNAME/mimo-agent.git`)
+3. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+4. **Make** your changes
+5. **Test** your changes
+6. **Commit** (`git commit -m 'Add amazing feature'`)
+7. **Push** (`git push origin feature/amazing-feature`)
+8. **Open** a Pull Request
 
 ### What We Need
 
-- 🔗 More chain integrations (Solana, Tron, etc.)
+- 🔗 More chain integrations (Solana, Tron, TON, etc.)
 - 🎨 Better UI/UX for Telegram commands
 - 📊 Portfolio tracking & analytics
 - 🔐 Security auditing tools
 - 📱 Mobile-friendly interfaces
 - 🌐 Multi-language support
 - 🧪 Tests and documentation
+- 🐛 Bug fixes
+- 📖 Documentation improvements
 
 ### Code Style
 
@@ -168,6 +179,15 @@ Edit `config.yaml` for:
 - Type hints preferred
 - Docstrings for public functions
 - Keep tools modular and self-contained
+
+### No Permission Needed
+
+- Found a bug? Fix it and submit a PR
+- Want a new feature? Build it and submit a PR
+- Improve documentation? Submit a PR
+- Add tests? Submit a PR
+
+**You don't need to ask permission. Just build and submit.**
 
 ---
 
@@ -180,7 +200,6 @@ MIT License — free to use, modify, and distribute.
 ## 🙏 Acknowledgments
 
 - [Xiaomi MiMo](https://aistudio.xiaomimimo.com/) — for the amazing AI model
-- [OpenAI](https://openai.com/) — for the tool-calling architecture
 - [Playwright](https://playwright.dev/) — for browser automation
 - [web3.py](https://web3py.readthedocs.io/) — for blockchain interaction
 
