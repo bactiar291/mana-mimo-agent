@@ -10,11 +10,11 @@ Powered by MiMo v2.5 Pro via session cookie — **no API key needed, no rate lim
 
 MiMo Agent is a **fully autonomous AI assistant** that runs on Xiaomi's MiMo v2.5 Pro model — **completely free, unlimited usage, zero API costs.**
 
-Unlike paid AI APIs that charge per token, MiMo Agent uses your Xiaomi account session cookie to access MiMo v2.5 Pro directly. This means:
+Using your Xiaomi account session cookie, MiMo Agent accesses MiMo v2.5 Pro directly:
 
 - ♾️ **Unlimited messages** — No daily/hourly limits
 - 💰 **Zero cost** — No API keys, no billing, no token counting
-- 🧠 **Smart reasoning** — MiMo v2.5 Pro is competitive with GPT-4 and Claude
+- 🧠 **Smart reasoning** — MiMo v2.5 Pro competitive with top AI models
 - 🔧 **204 built-in tools** — Code execution, browser automation, web search, crypto tools, and more
 - 📱 **Telegram native** — Full-featured Telegram bot with streaming, file uploads, media support
 - 🤖 **Multi-agent** — Supervisor/Planner system breaks complex tasks into sub-tasks
@@ -303,26 +303,30 @@ docker run -d \
 
 ---
 
-## 🤝 Contributing
+## 🤝 Contributing — Open Source!
 
-**Developers are welcome to contribute!** MiMo Agent is open-source and we encourage everyone to help improve it.
+**MiMo Agent is fully open-source. Everyone is welcome to contribute!**
 
 ### How to Contribute
 
 1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Commit** your changes: `git commit -m 'Add amazing feature'`
-4. **Push** to the branch: `git push origin feature/amazing-feature`
-5. **Open** a Pull Request
+2. **Clone** your fork: `git clone https://github.com/YOUR_USERNAME/mimo-agent.git`
+3. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+4. **Make your changes** — add features, fix bugs, improve docs
+5. **Commit** your changes: `git commit -m 'Add amazing feature'`
+6. **Push** to your fork: `git push origin feature/amazing-feature`
+7. **Open** a Pull Request to the main repo
 
-### What We're Looking For
+### What You Can Contribute
 
 - 🔧 **New tools** — Add new capabilities to the agent
 - 🐛 **Bug fixes** — Fix issues and improve stability
-- 📖 **Documentation** — Improve docs, add examples
+- 📖 **Documentation** — Improve docs, add examples, translate
 - 🌐 **Translations** — Help make MiMo Agent multilingual
 - ⚡ **Performance** — Optimize speed and resource usage
 - 🔗 **Integrations** — Connect with more platforms and services
+- 🧠 **AI improvements** — Better prompts, reasoning, memory
+- ⛓️ **Blockchain** — More chains, more DeFi protocols, more NFT tools
 
 ### Development Setup
 
@@ -339,9 +343,6 @@ source venv/bin/activate  # Linux/Mac
 # Install dependencies
 pip install -r requirements.txt
 
-# Run tests
-python -m pytest tests/
-
 # Start developing!
 ```
 
@@ -351,6 +352,13 @@ python -m pytest tests/
 - Add docstrings to new functions
 - Write tests for new features
 - Keep commits clean and descriptive
+
+### Join the Community
+
+- ⭐ **Star** this repo to show support
+- 🐛 **Report bugs** via Issues
+- 💡 **Suggest features** via Discussions
+- 🔀 **Submit PRs** — all improvements welcome!
 
 ---
 
@@ -363,6 +371,7 @@ You are free to:
 - ✅ Modify
 - ✅ Distribute
 - ✅ Use privately
+- ✅ Fork and build your own version
 
 ---
 
