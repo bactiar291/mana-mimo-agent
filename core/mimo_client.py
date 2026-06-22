@@ -58,10 +58,11 @@ def new_id() -> str:
 
 
 class MiMoClient:
-    def __init__(self, cookie: Optional[str] = None, model: str = "mimo-v2.5-pro"):
+    def __init__(self, cookie: Optional[str] = None, model: str = "mimo-v2.5-pro", timeout: int = 90):
         self.cookie = cookie or load_cookie()
         self.ph = extract_ph(self.cookie)
         self.model = model
+        self.timeout = timeout
         self.conversation_id = new_id()
         self.headers = {
             "content-type": "application/json",
@@ -179,7 +180,7 @@ class MiMoClient:
 
         answer = ""
         try:
-            with requests.post(BASE_URL, headers=self.headers, params=params, json=payload, stream=True, timeout=120) as resp:
+            with requests.post(BASE_URL, headers=self.headers, params=params, json=payload, stream=True, timeout=self.timeout) as resp:
                 event_type = None
                 for raw_line in resp.iter_lines(decode_unicode=True):
                     if raw_line is None:

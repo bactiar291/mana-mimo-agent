@@ -4,7 +4,7 @@ main.py — Agent CLI (Hermes-grade)
 Agentic assistant powered by MiMo v2.5 Pro via session cookie.
 
 Features:
-- 53 tools (web, file, terminal, python, browser, search, git, etc.)
+- Dynamic tool registry (web, file, terminal, python, browser, search, git, etc.)
 - Live thinking display (dim cyan)
 - Smooth animations with braille spinners
 - Persistent memory across sessions
@@ -45,6 +45,11 @@ COMMANDS = {
 # ─── Banner ──────────────────────────────────────────────────────────────────
 
 def banner():
+    try:
+        from tools.tools import get_tools_schema
+        tool_label = f"{len(get_tools_schema())} tools"
+    except Exception:
+        tool_label = "dynamic tools"
     art = f"""{C.C}
   \u2588\u2588\u2588\u2557   \u2588\u2588\u2588\u2557\u2588\u2588\u2557\u2588\u2588\u2588\u2557   \u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557
   \u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u2557
@@ -52,8 +57,8 @@ def banner():
   \u2588\u2588\u2551\u255a\u2588\u2588\u2554\u255d\u2588\u2588\u2551\u2588\u2588\u2551\u2588\u2588\u2551\u255a\u2588\u2588\u2554\u255d\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551
   \u2588\u2588\u2551 \u255a\u2550\u255d \u2588\u2588\u2551\u2588\u2588\u2551\u2588\u2588\u2551 \u255a\u2550\u255d \u2588\u2588\u2551\u255a\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255d
   \u255a\u2550\u255d     \u255a\u2550\u255d\u255a\u2550\u255d\u255a\u2550\u255d   \u255a\u2550\u255d \u255a\u2550\u2550\u2550\u2550\u2550\u255d
-  {C.DIM}            A  G  E  N  T{C.X}
-  {C.DIM}Agentic Assistant · 74 tools · v3.2{C.X}
+  {C.THINK}            A  G  E  N  T{C.X}
+  {C.DIM}Agentic Assistant · {tool_label} · v6.0{C.X}
 """
     print(art)
 

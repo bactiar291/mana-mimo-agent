@@ -8,6 +8,7 @@ import difflib
 import fnmatch
 import glob
 import hashlib
+import inspect
 import json
 import mimetypes
 import os
@@ -25,32 +26,56 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 # Import browser engine
+browser_engine = None
 try:
-    import browser_engine
+    from lib import browser_engine
     HAS_BROWSER_ENGINE = True
 except ImportError:
-    HAS_BROWSER_ENGINE = False
+    try:
+        import browser_engine
+        HAS_BROWSER_ENGINE = True
+    except ImportError:
+        HAS_BROWSER_ENGINE = False
 
 # Import search engine
 try:
-    import search_engine as _search_engine
+    from lib import search_engine as _search_engine
     HAS_SEARCH_ENGINE = True
 except ImportError:
-    HAS_SEARCH_ENGINE = False
+    try:
+        import search_engine as _search_engine
+        HAS_SEARCH_ENGINE = True
+    except ImportError:
+        HAS_SEARCH_ENGINE = False
 
 # Import extra tools (skills, memory, todo, vision, tts, browser extras)
 try:
-    from extra_tools import register_extra_tools
+    from tools.extra_tools import register_extra_tools
     HAS_EXTRA_TOOLS = True
 except ImportError:
-    HAS_EXTRA_TOOLS = False
+    try:
+        from extra_tools import register_extra_tools
+        HAS_EXTRA_TOOLS = True
+    except ImportError:
+        HAS_EXTRA_TOOLS = False
 
 # Import upgrade/learning system
 try:
-    from upgrade import register_upgrade_tools
+    from lib.upgrade import register_upgrade_tools
     HAS_UPGRADE_TOOLS = True
 except ImportError:
     HAS_UPGRADE_TOOLS = False
+
+# Import security approval system
+try:
+    from tools.security import request_command_approval, request_path_approval, check_command_safety, check_path_safety
+    HAS_SECURITY = True
+except ImportError:
+    try:
+        from security import request_command_approval, request_path_approval, check_command_safety, check_path_safety
+        HAS_SECURITY = True
+    except ImportError:
+        HAS_SECURITY = False
 
 
 # ─── Tool Registry ───────────────────────────────────────────────────────────
@@ -100,7 +125,28 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
     if name not in TOOLS:
         return json.dumps({"error": f"Tool '{name}' not found"})
     try:
-        result = TOOLS[name]["handler"](**args)
+        handler = TOOLS[name]["handler"]
+        call_args = args or {}
+        try:
+            signature = inspect.signature(handler)
+            params = list(signature.parameters.values())
+            has_var_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params)
+            args_style_handler = (
+                len(params) == 1
+                and params[0].name == "args"
+                and params[0].kind in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+                and not has_var_kwargs
+            )
+        except (TypeError, ValueError):
+            args_style_handler = False
+
+        if args_style_handler:
+            result = handler(call_args)
+        else:
+            result = handler(**call_args)
         return result if isinstance(result, str) else json.dumps(result)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -451,10 +497,12 @@ def _search_files(pattern: str, path: str = ".", target: str = "content", limit:
         path = os.path.expanduser(path)
         results = []
         if target == "files":
-            # Find files by name pattern
+            # Find files by name pattern. Accept shell globs (*.py) and regex.
+            glob_mode = any(ch in pattern for ch in "*?[]")
             for root, dirs, files in os.walk(path):
                 for f in files:
-                    if re.search(pattern, f, re.IGNORECASE):
+                    matched = fnmatch.fnmatch(f.lower(), pattern.lower()) if glob_mode else re.search(pattern, f, re.IGNORECASE)
+                    if matched:
                         results.append(os.path.join(root, f))
                         if len(results) >= limit:
                             break
@@ -505,12 +553,19 @@ register_tool(
 # ─── Terminal ────────────────────────────────────────────────────────────────
 
 def _terminal(command: str, timeout: int = 30, workdir: str = None) -> str:
-    """Execute a shell command."""
+    """Execute a shell command with security approval."""
     try:
+        # Security check
+        if HAS_SECURITY:
+            check = check_command_safety(command)
+            if not check.get("safe", True):
+                # Request approval
+                if not request_command_approval(command):
+                    return json.dumps({"error": "Command denied by user", "command": command})
+        
         cwd = workdir or os.getcwd()
         result = subprocess.run(
-            command,
-            shell=True,
+            ["bash", "-lc", command],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -1911,9 +1966,9 @@ def _browser_wait_for(selector: str, timeout: int = 10) -> str:
 def _browser_close() -> str:
     """Close the browser."""
     try:
-        import browser_engine
-        browser_engine.close_browser()
-        return json.dumps({"status": "closed"})
+        if not HAS_BROWSER_ENGINE or browser_engine is None:
+            return json.dumps({"error": "Browser engine is not available"})
+        return json.dumps(browser_engine.close_browser())
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -1921,7 +1976,8 @@ def _browser_close() -> str:
 def _browser_status() -> str:
     """Get browser status."""
     try:
-        import browser_engine
+        if not HAS_BROWSER_ENGINE or browser_engine is None:
+            return json.dumps({"error": "Browser engine is not available"})
         status = browser_engine.get_browser_status()
         return json.dumps(status)
     except Exception as e:
@@ -1931,7 +1987,8 @@ def _browser_status() -> str:
 def _browser_set_engine(engine: str) -> str:
     """Switch browser engine (drission/playwright)."""
     try:
-        import browser_engine
+        if not HAS_BROWSER_ENGINE or browser_engine is None:
+            return json.dumps({"error": "Browser engine is not available"})
         result = browser_engine.set_engine(engine)
         return json.dumps({"engine": result, "status": "switched"})
     except Exception as e:
@@ -2083,3 +2140,346 @@ if HAS_EXTRA_TOOLS:
 if HAS_UPGRADE_TOOLS:
     _upgrade_count = register_upgrade_tools(register_tool)
     # print(f"Registered {_upgrade_count} upgrade tools")
+
+# ─── Import New Modules (OpenClaw/Hermes/DeerFlow features) ──────────────
+
+# Supervisor/Planner (DeerFlow)
+try:
+    from tools.supervisor import register_supervisor_tools
+    HAS_SUPERVISOR = True
+except ImportError:
+    HAS_SUPERVISOR = False
+
+# Session Search (Hermes)
+try:
+    from tools.session_search import register_session_search_tools
+    HAS_SESSION_SEARCH = True
+except ImportError:
+    HAS_SESSION_SEARCH = False
+
+# Vision/Image Analysis
+try:
+    from tools.vision import register_vision_tools
+    HAS_VISION = True
+except ImportError:
+    HAS_VISION = False
+
+# Voice/TTS
+try:
+    from tools.voice import register_voice_tools
+    HAS_VOICE = True
+except ImportError:
+    HAS_VOICE = False
+
+# Webhooks
+try:
+    from tools.webhooks import register_webhook_tools
+    HAS_WEBHOOKS = True
+except ImportError:
+    HAS_WEBHOOKS = False
+
+# Enhanced Memory
+try:
+    from tools.enhanced_memory import register_enhanced_memory_tools
+    HAS_ENHANCED_MEMORY = True
+except ImportError:
+    HAS_ENHANCED_MEMORY = False
+
+# Thinking
+try:
+    from tools.thinking import register_thinking_tools
+    HAS_THINKING = True
+except ImportError:
+    HAS_THINKING = False
+
+# Notification
+try:
+    from tools.notification import register_notification_tools
+    HAS_NOTIFICATION = True
+except ImportError:
+    HAS_NOTIFICATION = False
+
+# Session Manager
+try:
+    from tools.session_manager import register_session_manager_tools
+    HAS_SESSION_MANAGER = True
+except ImportError:
+    HAS_SESSION_MANAGER = False
+
+# Cron Manager
+try:
+    from tools.cron_manager import register_cron_manager_tools
+    HAS_CRON_MANAGER = True
+except ImportError:
+    HAS_CRON_MANAGER = False
+
+# Delegation
+try:
+    from tools.delegation import register_delegation_tools
+    HAS_DELEGATION = True
+except ImportError:
+    HAS_DELEGATION = False
+
+# Skill Scanner (OpenClaw)
+try:
+    from tools.skill_scanner import register_skill_scanner_tools
+    HAS_SKILL_SCANNER = True
+except ImportError:
+    HAS_SKILL_SCANNER = False
+
+# Channel Router (OpenClaw)
+try:
+    from tools.channel_router import register_channel_router_tools
+    HAS_CHANNEL_ROUTER = True
+except ImportError:
+    HAS_CHANNEL_ROUTER = False
+
+# Auto Improve (OpenClaw)
+try:
+    from tools.auto_improve import register_auto_improve_tools
+    HAS_AUTO_IMPROVE = True
+except ImportError:
+    HAS_AUTO_IMPROVE = False
+
+# Event System (OpenClaw)
+try:
+    from tools.event_system import register_event_system_tools
+    HAS_EVENT_SYSTEM = True
+except ImportError:
+    HAS_EVENT_SYSTEM = False
+
+# Plugin System (OpenClaw)
+try:
+    from tools.plugin_system import register_plugin_system_tools
+    HAS_PLUGIN_SYSTEM = True
+except ImportError:
+    HAS_PLUGIN_SYSTEM = False
+
+# Context Compressor (Hermes)
+try:
+    from tools.context_compressor import register_context_compressor_tools
+    HAS_CONTEXT_COMPRESSOR = True
+except ImportError:
+    HAS_CONTEXT_COMPRESSOR = False
+
+# Credential Pool (Hermes)
+try:
+    from tools.credential_pool import register_credential_pool_tools
+    HAS_CREDENTIAL_POOL = True
+except ImportError:
+    HAS_CREDENTIAL_POOL = False
+
+# Skill Manager (Hermes)
+try:
+    from tools.skill_manager import register_skill_manager_tools
+    HAS_SKILL_MANAGER = True
+except ImportError:
+    HAS_SKILL_MANAGER = False
+
+# Kanban (Hermes)
+try:
+    from tools.kanban import register_kanban_tools
+    HAS_KANBAN = True
+except ImportError:
+    HAS_KANBAN = False
+
+# MCP Client (Hermes)
+try:
+    from tools.mcp_client import register_mcp_client_tools
+    HAS_MCP_CLIENT = True
+except ImportError:
+    HAS_MCP_CLIENT = False
+
+# Sandbox
+try:
+    from tools.sandbox import register_sandbox_tools
+    HAS_SANDBOX = True
+except ImportError:
+    HAS_SANDBOX = False
+
+# Checkpoints (Hermes)
+try:
+    from tools.checkpoints import register_checkpoint_tools
+    HAS_CHECKPOINTS = True
+except ImportError:
+    HAS_CHECKPOINTS = False
+
+# Workspaces (OpenClaw)
+try:
+    from tools.workspaces import register_workspace_tools
+    HAS_WORKSPACES = True
+except ImportError:
+    HAS_WORKSPACES = False
+
+# Register all new tools
+if HAS_SUPERVISOR:
+    try:
+        register_supervisor_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_SESSION_SEARCH:
+    try:
+        register_session_search_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_VISION:
+    try:
+        register_vision_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_VOICE:
+    try:
+        register_voice_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_WEBHOOKS:
+    try:
+        register_webhook_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_ENHANCED_MEMORY:
+    try:
+        register_enhanced_memory_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_THINKING:
+    try:
+        register_thinking_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_NOTIFICATION:
+    try:
+        register_notification_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_SESSION_MANAGER:
+    try:
+        register_session_manager_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_CRON_MANAGER:
+    try:
+        register_cron_manager_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_DELEGATION:
+    try:
+        register_delegation_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_SKILL_SCANNER:
+    try:
+        register_skill_scanner_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_CHANNEL_ROUTER:
+    try:
+        register_channel_router_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_AUTO_IMPROVE:
+    try:
+        register_auto_improve_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_EVENT_SYSTEM:
+    try:
+        register_event_system_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_PLUGIN_SYSTEM:
+    try:
+        register_plugin_system_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_CONTEXT_COMPRESSOR:
+    try:
+        register_context_compressor_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_CREDENTIAL_POOL:
+    try:
+        register_credential_pool_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_SKILL_MANAGER:
+    try:
+        register_skill_manager_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_KANBAN:
+    try:
+        register_kanban_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_MCP_CLIENT:
+    try:
+        register_mcp_client_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_SANDBOX:
+    try:
+        register_sandbox_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_CHECKPOINTS:
+    try:
+        register_checkpoint_tools(register_tool)
+    except Exception:
+        pass
+
+if HAS_WORKSPACES:
+    try:
+        register_workspace_tools(register_tool)
+    except Exception:
+        pass
+
+# ─── Import Security System ──────────────────────────────────────────────
+
+try:
+    from tools.security import register_security_tools
+    HAS_SECURITY_TOOLS = True
+except ImportError:
+    HAS_SECURITY_TOOLS = False
+
+if HAS_SECURITY_TOOLS:
+    try:
+        register_security_tools(register_tool)
+    except Exception:
+        pass
+
+# ─── Import Nodriver Engine ──────────────────────────────────────────────
+
+try:
+    from tools.nodriver_engine import register_nodriver_tools
+    HAS_NODEIVER = True
+except ImportError:
+    HAS_NODEIVER = False
+
+if HAS_NODEIVER:
+    try:
+        register_nodriver_tools(register_tool)
+    except Exception:
+        pass

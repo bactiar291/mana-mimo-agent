@@ -10,6 +10,11 @@ import subprocess
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+
+def _voice_enabled() -> bool:
+    value = os.environ.get("MIMO_VOICE_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no", "off", "disabled"}
+
 # ─── Skills System ──────────────────────────────────────────────────────────
 
 SKILLS_DIR = os.path.expanduser("~/.agent/skills")
@@ -22,10 +27,10 @@ def skill_view(name: str) -> str:
     _ensure_skills_dir()
     skill_path = os.path.join(SKILLS_DIR, f"{name}.md")
     if not os.path.exists(skill_path):
-        return json.dumps({"error": f"Skill '{name}' not found"})
+        return json.dumps({"success": False, "error": f"Skill '{name}' not found", "reason": "not_found"})
     with open(skill_path, 'r') as f:
         content = f.read()
-    return json.dumps({"name": name, "content": content[:5000]})
+    return json.dumps({"success": True, "name": name, "content": content[:5000]})
 
 def skill_manage(action: str, name: str = None, content: str = None) -> str:
     """Manage skills: create, update, delete, list."""
@@ -88,10 +93,10 @@ def _save_memory(data: dict):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def memory_tool(action: str, key: str = None, value: str = None) -> str:
-    """Persistent memory: add_fact, set_pref, add_note, get, clear."""
+    """Persistent memory: add_fact, set_pref, add_note, get/list, clear."""
     data = _load_memory()
     
-    if action == "get":
+    if action in ("get", "list"):
         return json.dumps(data)
     
     elif action == "add_fact":
@@ -117,7 +122,7 @@ def memory_tool(action: str, key: str = None, value: str = None) -> str:
         _save_memory(data)
         return json.dumps({"status": "cleared"})
     
-    return json.dumps({"error": f"Unknown action: {action}"})
+    return json.dumps({"success": False, "error": f"Unknown action: {action}", "valid_actions": ["get", "list", "add_fact", "set_pref", "add_note", "clear"]})
 
 
 # ─── Todo System ─────────────────────────────────────────────────────────────
@@ -238,6 +243,10 @@ def video_analyze(video_path: str, question: str = None) -> str:
 
 def text_to_speech(text: str, output_path: str = None) -> str:
     """Convert text to speech using edge-tts."""
+    if not _voice_enabled():
+        return json.dumps({"success": False, "error": "Voice tools disabled by MIMO_VOICE_ENABLED=0"})
+    if not text:
+        return json.dumps({"success": False, "error": "Text required"})
     if not output_path:
         output_path = os.path.expanduser(f"~/agent_tts_{int(time.time())}.mp3")
     
@@ -251,15 +260,15 @@ def text_to_speech(text: str, output_path: str = None) -> str:
         
         asyncio.run(generate())
         
-        if os.path.exists(output_path):
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             size = os.path.getsize(output_path)
-            return json.dumps({"output": output_path, "size_bytes": size, "status": "ok"})
+            return json.dumps({"success": True, "output": output_path, "size_bytes": size, "autoplay": False, "status": "ok"})
         else:
-            return json.dumps({"error": "TTS generation failed"})
+            return json.dumps({"success": False, "error": "TTS output file was not created"})
     except ImportError:
-        return json.dumps({"error": "edge-tts not installed. Run: pip install edge-tts"})
+        return json.dumps({"success": False, "error": "edge-tts not installed. Run: pip install edge-tts"})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"success": False, "error": str(e)})
 
 
 # ─── Browser Extras ─────────────────────────────────────────────────────────
@@ -267,7 +276,7 @@ def text_to_speech(text: str, output_path: str = None) -> str:
 def browser_press(key: str) -> str:
     """Press a keyboard key in the browser."""
     try:
-        import browser_engine
+        from lib import browser_engine
         if browser_engine.get_engine() == "playwright":
             page = browser_engine._get_playwright_browser()
             page.keyboard.press(key)
@@ -288,7 +297,7 @@ def browser_press(key: str) -> str:
 def browser_scroll(direction: str = "down", amount: int = 3) -> str:
     """Scroll the browser page."""
     try:
-        import browser_engine
+        from lib import browser_engine
         if browser_engine.get_engine() == "playwright":
             page = browser_engine._get_playwright_browser()
             delta = 300 * amount if direction == "down" else -300 * amount
@@ -305,7 +314,7 @@ def browser_scroll(direction: str = "down", amount: int = 3) -> str:
 def browser_snapshot() -> str:
     """Get a text snapshot of the current page (accessibility tree)."""
     try:
-        import browser_engine
+        from lib import browser_engine
         if browser_engine.get_engine() == "playwright":
             page = browser_engine._get_playwright_browser()
             # Get page content as text
@@ -342,7 +351,7 @@ def browser_snapshot() -> str:
 def browser_console(expression: str) -> str:
     """Execute JavaScript in browser console (alias for browser_evaluate)."""
     try:
-        import browser_engine
+        from lib import browser_engine
         return browser_engine.browser_evaluate(expression)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -352,6 +361,7 @@ def browser_console(expression: str) -> str:
 
 def register_extra_tools(register_tool_func):
     """Register all extra tools with the main tool registry."""
+    count = 0
     
     # Skills
     register_tool_func(
@@ -360,6 +370,7 @@ def register_extra_tools(register_tool_func):
         parameters={"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
         handler=skill_view
     )
+    count += 1
     
     register_tool_func(
         name="skill_manage",
@@ -371,6 +382,7 @@ def register_extra_tools(register_tool_func):
         }, "required": ["action"]},
         handler=skill_manage
     )
+    count += 1
     
     register_tool_func(
         name="skills_list",
@@ -378,18 +390,20 @@ def register_extra_tools(register_tool_func):
         parameters={"type": "object", "properties": {}, "required": []},
         handler=skills_list
     )
+    count += 1
     
     # Memory
     register_tool_func(
         name="memory",
-        description="Persistent memory: add_fact, set_pref, add_note, get, clear.",
+        description="Persistent memory: add_fact, set_pref, add_note, get/list, clear.",
         parameters={"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["get", "add_fact", "set_pref", "add_note", "clear"]},
+            "action": {"type": "string", "enum": ["get", "list", "add_fact", "set_pref", "add_note", "clear"]},
             "key": {"type": "string"},
             "value": {"type": "string"}
         }, "required": ["action"]},
         handler=memory_tool
     )
+    count += 1
     
     # Todo
     register_tool_func(
@@ -403,6 +417,7 @@ def register_extra_tools(register_tool_func):
         }, "required": ["action"]},
         handler=todo_tool
     )
+    count += 1
     
     # Vision
     register_tool_func(
@@ -414,6 +429,7 @@ def register_extra_tools(register_tool_func):
         }, "required": ["image_path"]},
         handler=vision_analyze
     )
+    count += 1
     
     register_tool_func(
         name="video_analyze",
@@ -424,17 +440,20 @@ def register_extra_tools(register_tool_func):
         }, "required": ["video_path"]},
         handler=video_analyze
     )
+    count += 1
     
     # TTS
-    register_tool_func(
-        name="text_to_speech",
-        description="Convert text to speech audio file.",
-        parameters={"type": "object", "properties": {
-            "text": {"type": "string"},
-            "output_path": {"type": "string"}
-        }, "required": ["text"]},
-        handler=text_to_speech
-    )
+    if _voice_enabled():
+        register_tool_func(
+            name="text_to_speech",
+            description="Convert text to speech audio file.",
+            parameters={"type": "object", "properties": {
+                "text": {"type": "string"},
+                "output_path": {"type": "string"}
+            }, "required": ["text"]},
+            handler=text_to_speech
+        )
+        count += 1
     
     # Browser extras
     register_tool_func(
@@ -445,6 +464,7 @@ def register_extra_tools(register_tool_func):
         }, "required": ["key"]},
         handler=browser_press
     )
+    count += 1
     
     register_tool_func(
         name="browser_scroll",
@@ -455,6 +475,7 @@ def register_extra_tools(register_tool_func):
         }, "required": ["direction"]},
         handler=browser_scroll
     )
+    count += 1
     
     register_tool_func(
         name="browser_snapshot",
@@ -462,6 +483,7 @@ def register_extra_tools(register_tool_func):
         parameters={"type": "object", "properties": {}, "required": []},
         handler=browser_snapshot
     )
+    count += 1
     
     register_tool_func(
         name="browser_console",
@@ -471,5 +493,6 @@ def register_extra_tools(register_tool_func):
         }, "required": ["expression"]},
         handler=browser_console
     )
+    count += 1
     
-    return 11  # Number of tools registered
+    return count

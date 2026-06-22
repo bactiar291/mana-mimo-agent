@@ -1,10 +1,85 @@
-# Sensitive files
+# ─── Sensitive / runtime-only data ────────────────────────────────────────
+# Xiaomi session cookie used to authenticate to MiMo upstream
 session_cookie.txt
+core/session_cookie.txt
+config/session_cookie.txt
+# Memory and private preferences
 memory.json
-*.log
+.mimo_agent_history
 conversation_*.md
 
-# Python
+# Telegram bot token and chat configuration
+config/telegram.json
+# End-user cookies exported by browsers
+cookies
+*.cookies
+
+# Plaintext secret material in any path
+*.secret
+*.secret.*
+*.key
+*.key.*
+*.pem
+*.p12
+secrets.*
+.env
+.env.*
+.env.local
+.env.production
+.cred*
+.cred.*
+
+# Runtime / state directories
+data/
+**/data/
+runtime/
+**/runtime/
+
+# Session databases, logs, and learning traces
+*.log
+*.log.*
+*.db
+*.sqlite
+*.sqlite3
+agent_runs.jsonl
+agent_lessons.jsonl
+
+# Memory dumps and conversation history
+memory_dump.json
+notes/*.json
+*session_export*.json
+
+# Credentials, webhooks, cron, channels, kanban
+**/data/credentials/**
+**/data/webhooks/**
+**/data/cron/**
+**/data/channels/**
+**/data/kanban/**
+**/data/mcp/**
+**/data/workspaces/**
+**/data/checkpoints/**
+**/data/delegation/**
+**/data/events/**
+**/data/learning/**
+**/data/memory/**
+**/data/plans/**
+**/data/skills/**
+**/data/sessions/**
+**/data/thinking/**
+
+# Browser and image cache
+/tmp/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+!assets/
+!assets/telegram/
+!assets/telegram/mimo_status_*.png
+
+# ─── Python ────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -12,26 +87,24 @@ __pycache__/
 dist/
 build/
 *.egg
+.venv/
+venv/
 
-# IDE
+# ─── IDE ───────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# ─── OS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
-.env.local
-
-# Browser data
-/tmp/
-*.png
-*.jpg
-
-# History
-.mimo_agent_history
+# ─── Test artifacts ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
