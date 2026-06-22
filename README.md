@@ -6,22 +6,28 @@ Powered by MiMo v2.5 Pro via session cookie — **no API key needed, no rate lim
 
 ---
 
-## 🚀 Why MiMo Agent?
+## 🚀 What is MiMo Agent?
 
-- **Unlimited usage** — Uses your Xiaomi account session cookie. No API keys, no billing, no token limits.
-- **204 built-in tools** — Code execution, browser automation, web search, file management, crypto tools, and more.
-- **Telegram native** — Full-featured Telegram bot with streaming responses, file uploads, media support.
-- **Multi-agent** — Supervisor/Planner system breaks complex tasks into sub-tasks and executes them in parallel.
-- **Self-learning** — Learns from errors and improves over time.
-- **Multi-chain crypto** — NFT hunting, airdrop automation, DeFi interactions across Base, Soneium, Polygon, and more.
+MiMo Agent is a **fully autonomous AI assistant** that runs on Xiaomi's MiMo v2.5 Pro model — **completely free, unlimited usage, zero API costs.**
+
+Unlike paid AI APIs that charge per token, MiMo Agent uses your Xiaomi account session cookie to access MiMo v2.5 Pro directly. This means:
+
+- ♾️ **Unlimited messages** — No daily/hourly limits
+- 💰 **Zero cost** — No API keys, no billing, no token counting
+- 🧠 **Smart reasoning** — MiMo v2.5 Pro is competitive with GPT-4 and Claude
+- 🔧 **204 built-in tools** — Code execution, browser automation, web search, crypto tools, and more
+- 📱 **Telegram native** — Full-featured Telegram bot with streaming, file uploads, media support
+- 🤖 **Multi-agent** — Supervisor/Planner system breaks complex tasks into sub-tasks
+- 🧬 **Self-learning** — Learns from errors and improves over time
+- ⛓️ **Multi-chain crypto** — NFT hunting, airdrop automation, DeFi across Base, Soneium, Polygon, and more
 
 ---
 
 ## 📋 Prerequisites
 
 - Python 3.10+
-- A Xiaomi account (with MiMo access)
-- A Telegram Bot Token (from @BotFather)
+- A Xiaomi account (with MiMo access at [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com))
+- A Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
 
 ---
 
@@ -41,47 +47,70 @@ playwright install chromium
 
 ---
 
-## 🍪 Getting Your Session Cookie
+## 🍪 Getting Your Session Cookie (Step-by-Step)
 
-MiMo Agent uses your Xiaomi account session cookie to access MiMo v2.5 Pro. This gives you **unlimited AI usage** without API keys or billing.
+MiMo Agent uses your Xiaomi account session cookie to access MiMo v2.5 Pro. This is what makes it **unlimited and free.**
 
 ### Step 1: Open MiMo AI Studio
 
-1. Go to [https://aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com)
-2. Log in with your Xiaomi account
-3. Make sure you can chat with MiMo
+1. Open your browser (Chrome recommended)
+2. Go to **[https://aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com)**
+3. Log in with your Xiaomi account (create one if you don't have it)
+4. Make sure you can chat with MiMo — send a test message to verify
 
 ### Step 2: Open Browser DevTools
 
-1. Press `F12` or right-click → "Inspect" to open DevTools
-2. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox)
+1. Press **F12** on your keyboard (or right-click anywhere → "Inspect")
+2. A panel will open on the right side of your browser
+3. Click the **Application** tab at the top of the panel
+   - If you don't see it, click the `>>` arrows to find it
 
-### Step 3: Copy Your Cookies
+### Step 3: Find Your Cookies
 
-1. In the left sidebar, expand **Cookies**
+1. In the left sidebar of the Application tab, expand **Cookies**
 2. Click on `https://aistudio.xiaomimimo.com`
-3. Find and copy these two values:
-   - `serviceToken` — This is your main session token
-   - `userId` — Your Xiaomi user ID
+3. You'll see a list of cookies — find these two:
+   - **`serviceToken`** — This is your main session token (long string)
+   - **`userId`** — Your Xiaomi user ID (numbers)
 
-### Step 4: Save the Cookie
+### Step 4: Copy the Values
 
-Create the config file:
+1. Click on the `serviceToken` row
+2. In the "Value" field at the bottom, copy the entire long string
+3. Do the same for `userId`
+
+> 💡 **Tip:** You can also get cookies from the **Network** tab:
+> 1. Go to the **Network** tab in DevTools
+> 2. Send a message in MiMo
+> 3. Click on any request to `aistudio.xiaomimimo.com`
+> 4. Look at the **Request Headers** → find the `Cookie` header
+> 5. Copy the `serviceToken=...` and `userId=...` values
+
+### Step 5: Save the Cookie
+
+Create the config directory and cookie file:
 
 ```bash
 mkdir -p config
 ```
 
-Create `config/session_cookie.txt` with this format:
+Create `config/session_cookie.txt`:
 
 ```
 serviceToken=YOUR_SERVICE_TOKEN_HERE
 userId=YOUR_USER_ID_HERE
 ```
 
-Replace `YOUR_SERVICE_TOKEN_HERE` and `YOUR_USER_ID_HERE` with the values you copied.
+Replace with your actual values. Example:
+```
+serviceToken=abc123xyz456...very_long_string...def789
+userId=1234567890
+```
 
-> ⚠️ **Keep this file private!** Anyone with your session cookie can access your Xiaomi account.
+> ⚠️ **IMPORTANT: Keep this file private!**
+> - Anyone with your session cookie can access your Xiaomi account
+> - Never share it publicly or commit it to Git
+> - The `.gitignore` already excludes `config/` folder
 
 ---
 
@@ -89,12 +118,19 @@ Replace `YOUR_SERVICE_TOKEN_HERE` and `YOUR_USER_ID_HERE` with the values you co
 
 ### Step 1: Create a Bot
 
-1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+1. Open Telegram and search for **[@BotFather](https://t.me/BotFather)**
 2. Send `/newbot`
-3. Follow the prompts to name your bot
-4. Copy the **bot token** (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+3. Choose a name for your bot (e.g., "MiMo Agent")
+4. Choose a username (must end in "bot", e.g., "mimo_agent_bot")
+5. Copy the **bot token** (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
 
-### Step 2: Configure the Bot
+### Step 2: Find Your Telegram User ID
+
+1. Search for **[@userinfobot](https://t.me/userinfobot)** on Telegram
+2. Send `/start`
+3. It will reply with your user ID (a number like `123456789`)
+
+### Step 3: Configure the Bot
 
 Create `config/telegram.json`:
 
@@ -105,72 +141,82 @@ Create `config/telegram.json`:
 }
 ```
 
-To find your Telegram user ID:
-1. Search for [@userinfobot](https://t.me/userinfobot) on Telegram
-2. Send `/start`
-3. It will reply with your user ID
+Example:
+```json
+{
+    "bot_token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+    "allowed_users": ["987654321"]
+}
+```
 
-### Step 3: Run the Bot
+> 💡 You can add multiple user IDs to allow friends/family to use your bot.
+
+### Step 4: Run the Bot
 
 ```bash
-# Start the Telegram gateway
 python start_tg.py
 ```
 
-Your bot is now live! Send any message to your bot on Telegram and MiMo Agent will respond.
+Your bot is now live! Open Telegram, find your bot, and send any message. MiMo Agent will respond with full AI capabilities.
+
+### Step 5 (Optional): Run as Background Service
+
+To keep the bot running 24/7:
+
+```bash
+# Using systemd (Linux)
+sudo nano /etc/systemd/system/mimo-agent.service
+```
+
+Add this content:
+```ini
+[Unit]
+Description=MiMo Agent Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/to/mimo-agent
+ExecStart=/usr/bin/python3 start_tg.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start:
+```bash
+sudo systemctl enable mimo-agent
+sudo systemctl start mimo-agent
+sudo systemctl status mimo-agent
+```
 
 ---
 
 ## 💻 CLI Mode
 
-You can also use MiMo Agent directly from the terminal:
+Use MiMo Agent directly from your terminal:
 
 ```bash
 python core/main.py
 ```
 
-This starts an interactive chat session in your terminal.
+This starts an interactive chat session. Type your message and press Enter.
 
 ---
 
 ## 🛠️ Available Tools (204 total)
 
-### Code & Development
-- Python code execution
-- Shell command execution
-- File read/write/edit
-- Code analysis and debugging
-
-### Browser & Web
-- Web page browsing and interaction
-- Form filling and clicking
-- Screenshot capture
-- Multi-search (DuckDuckGo, SearXNG, Brave)
-
-### Crypto & Blockchain
-- Multi-chain wallet management
-- NFT minting and trading
-- DeFi interactions
-- Airdrop automation
-- Contract analysis
-
-### Telegram & Communication
-- Message sending
-- File uploads
-- Media handling (photos, videos, audio)
-- Inline keyboards
-
-### System & Automation
-- Scheduled tasks (cron)
-- Background process management
-- Notification system
-- Sub-agent spawning
-
-### Knowledge & Memory
-- Persistent memory across sessions
-- Session search (FTS5)
-- Skill system
-- Context compression
+| Category | Tools |
+|----------|-------|
+| **Code & Development** | Python execution, shell commands, file ops, code analysis, debugging |
+| **Browser & Web** | Web browsing, form filling, screenshots, multi-search (DuckDuckGo, SearXNG, Brave) |
+| **Crypto & Blockchain** | Multi-chain wallets, NFT minting/trading, DeFi, airdrop automation, contract analysis |
+| **Telegram & Communication** | Message sending, file uploads, media handling, inline keyboards |
+| **System & Automation** | Cron jobs, background processes, notifications, sub-agent spawning |
+| **Knowledge & Memory** | Persistent memory, session search (FTS5), skill system, context compression |
 
 ---
 
@@ -193,8 +239,8 @@ mimo-agent/
 │   ├── search_engine.py     # Multi-search
 │   └── todo_store.py        # Todo management
 ├── config/                  # Configuration
-│   ├── session_cookie.txt   # MiMo cookie
-│   └── telegram.json        # Telegram config
+│   ├── session_cookie.txt   # MiMo cookie (create this)
+│   └── telegram.json        # Telegram config (create this)
 ├── start_tg.py              # Telegram gateway
 └── requirements.txt         # Dependencies
 ```
@@ -203,11 +249,12 @@ mimo-agent/
 
 ## 🔒 Security
 
-- Command safety checks before terminal execution
-- Path sandbox (ALLOWED_BASES restriction)
-- Cookie chmod 600 enforcement
-- Input validation
-- User allowlist for Telegram access
+- ✅ Command safety checks before terminal execution
+- ✅ Path sandbox (ALLOWED_BASES restriction)
+- ✅ Cookie chmod 600 enforcement
+- ✅ Input validation
+- ✅ User allowlist for Telegram access
+- ✅ `.gitignore` excludes all sensitive config files
 
 ---
 
@@ -224,12 +271,13 @@ mimo-agent/
 
 ### Cookie Refresh
 
-Session cookies expire after some time. If you get authentication errors:
+Session cookies expire after some time (usually days/weeks). If you get authentication errors:
 
 1. Go back to [https://aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com)
 2. Log in again if needed
-3. Repeat the cookie extraction steps above
+3. Repeat the cookie extraction steps from [Getting Your Session Cookie](#-getting-your-session-cookie-step-by-step)
 4. Update `config/session_cookie.txt` with the new values
+5. Restart the bot
 
 ---
 
@@ -251,22 +299,70 @@ docker run -d \
 - **14,108+** lines of code
 - **38** modules
 - **0** API costs — completely free to run
+- **Unlimited** usage via session cookie
 
 ---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+**Developers are welcome to contribute!** MiMo Agent is open-source and we encourage everyone to help improve it.
+
+### How to Contribute
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'Add amazing feature'`
+4. **Push** to the branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
+
+### What We're Looking For
+
+- 🔧 **New tools** — Add new capabilities to the agent
+- 🐛 **Bug fixes** — Fix issues and improve stability
+- 📖 **Documentation** — Improve docs, add examples
+- 🌐 **Translations** — Help make MiMo Agent multilingual
+- ⚡ **Performance** — Optimize speed and resource usage
+- 🔗 **Integrations** — Connect with more platforms and services
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/mimo-agent.git
+cd mimo-agent
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+python -m pytest tests/
+
+# Start developing!
+```
+
+### Code Style
+
+- Follow PEP 8 for Python code
+- Add docstrings to new functions
+- Write tests for new features
+- Keep commits clean and descriptive
 
 ---
 
 ## 📄 License
 
 MIT License — See [LICENSE](LICENSE) for details.
+
+You are free to:
+- ✅ Use commercially
+- ✅ Modify
+- ✅ Distribute
+- ✅ Use privately
 
 ---
 
@@ -276,6 +372,13 @@ MIT License — See [LICENSE](LICENSE) for details.
 - **DrissionPage** — Browser automation
 - **Playwright** — SPA rendering
 - **DuckDuckGo** — Free web search
+- **All contributors** — Thank you for making MiMo Agent better!
+
+---
+
+## ⭐ Star This Repo
+
+If you find MiMo Agent useful, please **star this repo** to help others discover it!
 
 ---
 
