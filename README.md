@@ -1,4 +1,4 @@
-# 🤖 MiMo Agent — Unlimited AI Assistant
+#  MiMo Agent — Unlimited AI Assistant
 
 **204+ tools | No API key needed | Free forever**
 
