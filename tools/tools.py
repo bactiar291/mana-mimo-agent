@@ -2483,3 +2483,17 @@ if HAS_NODEIVER:
         register_nodriver_tools(register_tool)
     except Exception:
         pass
+
+
+# ─── Apply Honest Tool Profile ───────────────────────────────────────────
+# Everything above registers the full historical surface. The profile below
+# trims it to tools that were verified to actually run in this environment,
+# so the model is never told about a capability that fails at call time.
+# Set MIMO_TOOL_PROFILE=full to restore the unfiltered registry.
+
+try:
+    from tools.tool_profile import apply_profile as _apply_tool_profile
+
+    PROFILE_REMOVED_TOOLS = _apply_tool_profile(TOOLS)
+except Exception:
+    PROFILE_REMOVED_TOOLS = []

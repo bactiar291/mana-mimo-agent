@@ -1,244 +1,205 @@
-#  MiMo Agent — Unlimited AI Assistant
+# 🤖 MiMo Agent
 
-**204+ tools | No API key needed | Free forever**
+**72 verified tools | No API key needed | Runs on a MiMo session cookie**
 
-Powered by MiMo v2.5 Pro via session cookie — **unlimited usage, zero cost.**
+An agentic assistant that plans, calls tools, and reports what it actually did.
+Powered by MiMo v2.5 Pro through the AI Studio web session — no paid API key.
 
-> **By [Bactiar 291](https://github.com/bactiar291)** — Open source, free to use, contributions welcome!
-
----
-
-## ✨ What Can It Do?
-
-- **204+ Tools** — file ops, web scraping, browser automation, crypto, NFT hunting, DeFi, Telegram, Discord, and more
-- **Telegram Gateway** — run as a personal AI assistant in Telegram
-- **Multi-Chain Crypto** — Base, Soneium, Polygon, Arbitrum, Optimism, BSC, Avalanche
-- **NFT Hunting** — auto-scan free mints, audit contracts, mint & list
-- **Browser Automation** — Playwright + DrissionPage, anti-detection
-- **Self-Learning** — auto-improve from errors, skill system
-- **Persistent Memory** — remembers across sessions
-- **Cron Jobs** — schedule any task to run automatically
-- **Multi-Agent** — delegate tasks to sub-agents in parallel
-- **Voice/TTS** — text-to-speech with edge-tts
-- **Vision** — analyze images and screenshots
+> **By [Bactiar 291](https://github.com/bactiar291)** — Open source, contributions welcome.
 
 ---
 
-## 🚀 Quick Start — Step by Step
+## ✨ What It Actually Does
 
-### Step 1: Get MiMo Session Cookie (FREE — No API Key!)
+Every capability below was executed in a real environment before being listed here.
+Nothing is advertised that returns "not implemented" at call time.
 
-MiMo Agent uses MiMo v2.5 Pro via session cookie — **completely free, no API key required, unlimited usage.**
+- **72 active tools** — files, code, git, shell, Python, web, browser, OCR, TTS, memory, skills, delegation
+- **Telegram gateway** — use it as a personal assistant in chat, with a live status card that updates in place while it works
+- **Browser automation** — headless anti-detect Chromium via DrissionPage, with a Playwright engine option
+- **Web research** — DuckDuckGo search with SearXNG/Wikipedia/Brave fallback, plus page extraction and raw HTTP
+- **Persistent memory** — facts, preferences, and profile survive restarts
+- **Skills** — reusable markdown procedures the agent can read and write
+- **Subagent delegation** — hand an isolated task to a separate agent run
+- **Evidence-first answers** — the system prompt forbids describing tool output that was never received
 
-**Detailed Instructions:**
+### Honest limits
 
-1. Open your browser (Chrome recommended)
-2. Go to [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/)
-3. Log in with your Xiaomi account
-   - Don't have one? Click "Sign Up" and create a free Xiaomi account
-4. Once logged in, press **F12** (or right-click → "Inspect") to open DevTools
-5. Click the **Application** tab at the top of DevTools
-6. In the left sidebar, find **Cookies** → click the dropdown
-7. Click on `https://aistudio.xiaomimimo.com`
-8. You'll see a list of cookies. Find these two:
+| Not available | Why |
+|---------------|-----|
+| Email / SMS notifications | No SMTP or SMS provider is wired up |
+| MCP client | JSON-RPC transport is not implemented |
+| Audio transcription | Needs the `whisper` CLI, not installed by default |
+| Image *content* understanding | `vision_analyze` returns metadata + OCR, not a vision model description |
+| Crypto / NFT / DeFi tools | Not part of this repository |
 
-| Cookie Name | What to Copy |
-|-------------|-------------|
-| `session` | The long string value — this is your main session token |
-| `user` | Your user ID (optional but recommended) |
+A larger historical registry (204 tools) still ships in the source. Most of it was
+unreachable, duplicated, or unimplemented, so it is filtered out by default. Set
+`MIMO_TOOL_PROFILE=full` if you want to inspect it.
 
-9. **Right-click** on the cookie value → **Copy Value**
-10. **Save these values somewhere safe** — you'll need them in Step 3
+---
 
-> ⚠️ **Important Notes:**
-> - The session cookie **expires after some time** (usually days/weeks)
-> - If the agent stops responding or gives auth errors, repeat Step 1 to get a fresh cookie
-> - Never share your session cookie with anyone — it gives full access to your MiMo account
-> - The cookie is a long string starting with something like `eyJ...` or similar
+## 🚀 Quick Start
 
-### Step 2: Create Telegram Bot
+### Step 1: Get your MiMo session cookie (free)
 
-1. Open Telegram on your phone or desktop
-2. Search for [@BotFather](https://t.me/BotFather) (verified bot with blue checkmark)
-3. Send `/newbot` command
-4. BotFather will ask for a **name** — enter anything (e.g., "My AI Assistant")
-5. Then ask for a **username** — must end with "bot" (e.g., "my_assistant_bot")
-6. BotFather will reply with your **bot token** — looks like:
-   ```
-   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-   ```
-7. **Copy this token** and save it
+1. Open [aistudio.xiaomimimo.com](https://aistudio.xiaomimimo.com/) and log in with a Xiaomi account
+2. Press **F12** → **Application** tab → **Cookies** → `https://aistudio.xiaomimimo.com`
+3. Copy the full cookie string (it must include `xiaomichatbot_ph=...` — that value is what the client parses)
 
-### Step 3: Install & Configure
+> ⚠️ The cookie expires after days or weeks. If the agent starts returning auth errors, grab a fresh one.
+> Never share it: it grants full access to your MiMo account.
+
+### Step 2: Create a Telegram bot
+
+1. Message [@BotFather](https://t.me/BotFather) → `/newbot`
+2. Pick a name, then a username ending in `bot`
+3. Copy the token it returns
+
+### Step 3: Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/bactiar291/mimo-agent.git
 cd mimo-agent
 
-# Install Python dependencies
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Create .env file with your credentials
-cat > .env << 'EOF'
-MIMO_SESSION=paste_your_session_cookie_here
-MIMO_USER=paste_your_user_id_here
-TELEGRAM_BOT_TOKEN=paste_your_bot_token_here
-EOF
 ```
 
-**Example .env file:**
-```
-MIMO_SESSION=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-MIMO_USER=12345678
-TELEGRAM_BOT_TOKEN=7123456789:AAH_xxxxxxxxxxxxxxxxxxxxxxx
-```
+### Step 4: Configure
 
-### Step 4: Run
+The cookie goes in `core/session_cookie.txt` (or the `XIAOMI_COOKIE` env var):
 
 ```bash
-# Run in Telegram mode (recommended)
-python start_tg.py
-
-# Or run in CLI mode (terminal chat)
-python core/agent.py
+cp session_cookie.txt.example core/session_cookie.txt
+# paste your cookie string into core/session_cookie.txt
 ```
 
-### Step 5: Start Using
+Telegram settings live in `config/telegram.json`:
 
-1. Open Telegram
-2. Find your bot (the one you created in Step 2)
-3. Send any message — "Hello", "What can you do?", "Search the web for..."
-4. The agent will respond and use tools as needed
+```json
+{
+  "telegram_token": "123456789:ABCdef...",
+  "telegram_chat_id": "YOUR_NUMERIC_CHAT_ID",
+  "telegram_admin_chat_ids": [],
+  "telegram_admin_password": "change-me",
+  "model": "mimo-v2.5-pro",
+  "web_search": true,
+  "show_thinking": true,
+  "max_tool_calls": 0
+}
+```
 
-**That's it!** You now have a personal AI assistant with 204+ tools, unlimited usage, and zero cost.
+`max_tool_calls: 0` means runtime-bounded instead of a fixed call cap; the runtime
+limit and per-tool timeouts still apply.
+
+### Step 5: Run
+
+```bash
+python start_tg.py     # Telegram gateway
+python p.py            # CLI chat
+```
 
 ---
 
-## 🛠️ Available Tools (204+)
+## 🛠️ Tool Surface (72)
 
 | Category | Tools |
 |----------|-------|
-| **File System** | read, write, edit, search, list, patch |
-| **Web** | search, extract, browse, scrape |
-| **Browser** | click, type, navigate, screenshot, snapshot |
-| **Crypto** | wallet ops, swap, bridge, stake |
-| **NFT** | scan mints, audit contracts, mint, list |
-| **DeFi** | Aerodrome, Velodrome, Uniswap, Sushi |
-| **Telegram** | send, receive, manage groups |
-| **System** | terminal, process, cron, memory |
-| **AI** | delegate tasks, vision, TTS |
+| **File & code** (22) | `read_file`, `write_file`, `append_file`, `patch_file`, `replace_in_file`, `file_info`, `find_files`, `search_files`, `list_directory`, `list_tree`, `create_directory`, `copy_path`, `move_path`, `move_to_trash`, `text_diff`, `read_json`, `csv_preview`, `code_outline`, `project_map`, `create_archive`, `extract_archive`, `sqlite_query` |
+| **Git** (4) | `git_status`, `git_diff`, `git_log`, `git_show` |
+| **Shell & system** (6) | `terminal`, `execute_python`, `system_info`, `process_list`, `process_kill`, `disk_usage` |
+| **Web** (4) | `web_search`, `web_extract`, `http_request`, `download_file` |
+| **Browser** (15) | `browser_open`, `browser_get_text`, `browser_get_links`, `browser_click`, `browser_type`, `browser_press`, `browser_scroll`, `browser_evaluate`, `browser_console`, `browser_snapshot`, `browser_screenshot`, `browser_wait_for`, `browser_status`, `browser_close`, `browser_set_engine` |
+| **Media** (7) | `vision_ocr`, `vision_screenshot`, `vision_analyze`, `vision_compare`, `voice_tts`, `voice_list`, `voice_info` |
+| **Agent state** (11) | `memory`, `memory_facts`, `memory_preferences`, `memory_profile`, `todo`, `current_time`, `skill_view`, `skill_manage`, `skills_list`, `delegate_task`, `delegate_status` |
+| **Notify** (3) | `notify_telegram`, `notify_discord`, `notify_slack` |
+
+`/tools` and `/status` in Telegram report the live count and the active profile.
 
 ---
 
-## 🔧 Architecture
+## 🔧 Repository Layout
 
 ```
 mimo-agent/
 ├── core/
-│   ├── agent.py          # Main agent loop
-│   ├── tools/            # 204+ tool implementations
-│   └── memory/           # Persistent memory system
-├── telegram/
-│   └── gateway.py        # Telegram bot integration
-├── browser/
-│   ├── playwright.py     # Playwright automation
-│   └── drission.py       # DrissionPage (anti-detect)
-├── crypto/
-│   ├── chains.py         # Multi-chain support
-│   └── nft_hunter.py     # NFT scanning & minting
-├── skills/               # Reusable skill procedures
-└── start_tg.py           # Entry point (Telegram mode)
+│   ├── agent.py            # Agent loop, system prompt, tool routing
+│   ├── mimo_client.py      # MiMo session client (SSE streaming, think tags)
+│   ├── main.py             # CLI entry logic
+│   └── session_cookie.txt  # Your cookie (gitignored)
+├── tools/
+│   ├── tools.py            # Core registry + most tool implementations
+│   ├── tool_profile.py     # Which tools are honestly exposed
+│   ├── vision.py voice.py  # OCR / screenshot / TTS
+│   ├── deep_audit.py       # Executable tool + agent-loop audit
+│   └── ...                 # Optional subsystems (filtered out by default)
+├── lib/
+│   ├── browser_engine.py   # DrissionPage / Playwright driver
+│   ├── search_engine.py    # Multi-engine search with fallback
+│   └── upgrade.py          # Learning log helpers
+├── config/telegram.json    # Gateway config
+├── skills/                 # Reusable markdown procedures
+├── tests/                  # pytest suite (60 tests)
+├── start_tg.py             # Telegram gateway entry point
+└── p.py                    # CLI entry point
 ```
 
 ---
 
-## 📖 Configuration
+## 🧪 Tests & Audit
 
-### Environment Variables
+```bash
+python -m pytest tests/ -q          # full suite
+python -m tools.deep_audit          # execute every safe tool for real
+```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `MIMO_SESSION` | Session cookie from MiMo AI Studio | ✅ |
-| `MIMO_USER` | User ID (optional) | ❌ |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather | ✅ |
-| `OPENAI_API_KEY` | OpenAI API key (optional, for fallback) | ❌ |
-| `ETHERSCAN_API_KEY` | For contract verification | ❌ |
-
-### Advanced Configuration
-
-Edit `config.yaml` for:
-- Model selection
-- Tool enable/disable
-- Memory settings
-- Cron schedules
-- Chain RPCs
+`deep_audit` runs each safe tool with real arguments and reports pass/fail per
+tool plus four agent-loop scenarios, so regressions surface as failures instead
+of optimistic documentation.
 
 ---
 
-## 🤝 Contributing — Developers Welcome!
+## 📖 Environment Variables
 
-**This is an open-source project. Anyone can contribute!**
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `XIAOMI_COOKIE` | MiMo session cookie (alternative to `core/session_cookie.txt`) | one of the two |
+| `MIMO_TOOL_PROFILE` | `lean` (default) or `full` | ❌ |
+| `MIMO_VOICE_ENABLED` | Set `0` to unregister TTS tools | ❌ |
+| `MIMO_TELEGRAM_AGENT_RUNTIME` | Max seconds per Telegram task (default 900) | ❌ |
+| `MIMO_TELEGRAM_REQUEST_TIMEOUT` | Per-model-request timeout (default 120) | ❌ |
+| `MIMO_TELEGRAM_MAX_TOOL_CALLS` | `0` = runtime-bounded (default) | ❌ |
 
-Whether you're a beginner or an experienced developer, your contributions are valued. Help us make MiMo Agent better for everyone.
+---
 
-### How to Contribute
+## 🤝 Contributing
 
-1. **Fork** this repository
-2. **Clone** your fork (`git clone https://github.com/YOUR_USERNAME/mimo-agent.git`)
-3. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-4. **Make** your changes
-5. **Test** your changes
-6. **Commit** (`git commit -m 'Add amazing feature'`)
-7. **Push** (`git push origin feature/amazing-feature`)
-8. **Open** a Pull Request
+Fork, branch, change, test, PR. No permission needed.
 
-### What We Need
+Please keep two rules:
 
-- 🔗 More chain integrations (Solana, Tron, TON, etc.)
-- 🎨 Better UI/UX for Telegram commands
-- 📊 Portfolio tracking & analytics
-- 🔐 Security auditing tools
-- 📱 Mobile-friendly interfaces
-- 🌐 Multi-language support
-- 🧪 Tests and documentation
-- 🐛 Bug fixes
-- 📖 Documentation improvements
+1. **A tool must work before it is registered.** If it needs a binary or credential
+   that may be absent, return `{"success": false, "reason": "not_implemented"}` and
+   leave it out of `LEAN_TOOLS`.
+2. **Documentation must match the code.** If you change the tool surface, update the
+   README table and run the test suite.
 
-### Code Style
-
-- Python 3.10+
-- Type hints preferred
-- Docstrings for public functions
-- Keep tools modular and self-contained
-
-### No Permission Needed
-
-- Found a bug? Fix it and submit a PR
-- Want a new feature? Build it and submit a PR
-- Improve documentation? Submit a PR
-- Add tests? Submit a PR
-
-**You don't need to ask permission. Just build and submit.**
+Style: Python 3.10+, type hints preferred, docstrings on public functions, tools modular.
 
 ---
 
 ## 📜 License
 
-MIT License — free to use, modify, and distribute.
+MIT.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- [Xiaomi MiMo](https://aistudio.xiaomimimo.com/) — for the amazing AI model
-- [Playwright](https://playwright.dev/) — for browser automation
-- [web3.py](https://web3py.readthedocs.io/) — for blockchain interaction
-
----
-
-## ⭐ Star This Repo
-
-If you find this useful, give it a star! It helps others discover the project.
+- [Xiaomi MiMo](https://aistudio.xiaomimimo.com/) — the model
+- [DrissionPage](https://github.com/g1879/DrissionPage) & [Playwright](https://playwright.dev/) — browser automation
+- [python-telegram-bot](https://python-telegram-bot.org/) — Telegram gateway
 
 **Made with ❤️ by [Bactiar 291](https://github.com/bactiar291)**
