@@ -1,6 +1,14 @@
 """
-search_engine.py — Multi-engine web search for MiMo Agent
-Supports: DuckDuckGo (free, no API), SearXNG (self-hosted, free), Brave (API key)
+search_engine.py — Keyless web search for MiMo Agent.
+
+Design rule: every default backend must work WITHOUT an API key.
+Priority (all free, no key):
+  1. ddgs      — aggregator lib, tries bing/brave/duckduckgo/... (lazy import, optional)
+  2. duckduckgo — direct HTML scrape of html.duckduckgo.com (stdlib only)
+  3. searxng   — public instances with ?format=json (often rate-limited, kept as fallback)
+  4. wikipedia — MediaWiki list=search API (always reachable, snippets included)
+
+Brave stays available but is OFF the default path because it requires a key.
 """
 import json
 import re
@@ -10,16 +18,55 @@ import ssl
 from html import unescape
 from typing import List, Dict, Any, Optional
 
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 # ─── Search Engines ─────────────────────────────────────────────────────────
+
+
+def search_ddgs(query: str, limit: int = 5, backends: Optional[List[str]] = None) -> List[Dict[str, str]]:
+    """Search via the `ddgs` package (free, no API key). Lazy import: optional dep."""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        return [{"error": "ddgs: not installed (optional). Run: pip install ddgs"}]
+
+    # "auto" aggregates several keyless engines; explicit ones are per-engine fallbacks.
+    order = backends or ["auto", "bing", "brave", "duckduckgo", "yahoo", "mojeek"]
+    failures: List[str] = []
+
+    for backend in order:
+        try:
+            raw = DDGS().text(query, max_results=limit, backend=backend)
+        except Exception as error:
+            failures.append(f"{backend}: {type(error).__name__}")
+            continue
+
+        results = []
+        for item in (raw or [])[:limit]:
+            url = (item.get("href") or item.get("url") or "").strip()
+            if not url.startswith("http"):
+                continue
+            results.append({
+                "url": url,
+                "title": (item.get("title") or "").strip(),
+                "description": (item.get("body") or item.get("description") or "").strip(),
+                "backend": backend,
+            })
+        if results:
+            return results
+
+    return [{"error": f"ddgs: no results from any backend ({', '.join(failures) or 'empty'})"}]
+
 
 def search_duckduckgo(query: str, limit: int = 5) -> List[Dict[str, str]]:
     """Search using DuckDuckGo HTML (no API key needed)."""
     results = []
     try:
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(query)}"
-        req = urllib.request.Request(url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        })
+        req = urllib.request.Request(url, headers={'User-Agent': _UA})
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -30,11 +77,8 @@ def search_duckduckgo(query: str, limit: int = 5) -> List[Dict[str, str]]:
         if "anomaly.js" in html or "challenge-form" in html:
             return [{"error": "DuckDuckGo: blocked_by_challenge"}]
 
-        # Parse results from HTML
-        # DDG HTML format: <a rel="nofollow" class="result__a" href="URL">TITLE</a>
-        # <a class="result__snippet" href="...">DESCRIPTION</a>
-
-        # Extract result blocks
+        # DDG HTML format: <a class="result__a" href="URL">TITLE</a>
+        #                  <a class="result__snippet" ...>DESCRIPTION</a>
         result_pattern = r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>'
         snippet_pattern = r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>'
 
@@ -42,16 +86,13 @@ def search_duckduckgo(query: str, limit: int = 5) -> List[Dict[str, str]]:
         snippets = re.findall(snippet_pattern, html, re.DOTALL)
 
         for i, (link, title) in enumerate(links[:limit]):
-            # Clean up link (DDG sometimes wraps URLs)
             if 'uddg=' in link:
                 match = re.search(r'uddg=([^&]+)', link)
                 if match:
                     link = urllib.parse.unquote(match.group(1))
 
-            # Clean HTML from title
             clean_title = unescape(re.sub(r'<[^>]+>', '', title)).strip()
 
-            # Get snippet if available
             snippet = ""
             if i < len(snippets):
                 snippet = unescape(re.sub(r'<[^>]+>', '', snippets[i])).strip()
@@ -60,7 +101,7 @@ def search_duckduckgo(query: str, limit: int = 5) -> List[Dict[str, str]]:
                 results.append({
                     "url": link,
                     "title": clean_title,
-                    "description": snippet
+                    "description": snippet,
                 })
 
         if not results:
@@ -73,19 +114,22 @@ def search_duckduckgo(query: str, limit: int = 5) -> List[Dict[str, str]]:
 
 
 def search_searxng(query: str, limit: int = 5, instance: str = None) -> List[Dict[str, str]]:
-    """Search using SearXNG public instance (free, no API key)."""
+    """Search using public SearXNG instances (free, no API key). Often rate-limited."""
     results = []
 
-    # Public SearXNG instances (no API key needed)
     instances = [
-        instance,  # User-provided instance first
+        instance,  # user-provided first
         "https://searx.be",
-        "https://search.sapti.me",
-        "https://searxng.site",
-        "https://search.bus-hit.me",
-        "https://searx.tuxcloud.net",
+        "https://priv.au",
+        "https://searx.tiekoetter.com",
+        "https://search.inetol.net",
+        "https://opnxng.com",
+        "https://paulgo.io",
+        "https://search.rhscz.eu",
+        "https://searx.namejeff.xyz",
     ]
-    instances = [i for i in instances if i]  # Remove None
+    instances = [i for i in instances if i]
+    failures: List[str] = []
 
     for inst in instances:
         try:
@@ -93,130 +137,135 @@ def search_searxng(query: str, limit: int = 5, instance: str = None) -> List[Dic
                 'q': query,
                 'format': 'json',
                 'categories': 'general',
-                'language': 'en',
             })
             url = f"{inst}/search?{params}"
 
             req = urllib.request.Request(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': _UA,
                 'Accept': 'application/json',
             })
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
 
             for item in data.get('results', [])[:limit]:
                 results.append({
                     "url": item.get('url', ''),
                     "title": item.get('title', ''),
-                    "description": item.get('content', '')
+                    "description": item.get('content', ''),
                 })
 
             if results:
-                return results  # Success, return
+                return results
 
-        except Exception:
-            continue  # Try next instance
+        except Exception as error:
+            failures.append(f"{inst.split('//')[-1]}: {type(error).__name__}")
+            continue
 
     if not results:
-        results.append({"error": "SearXNG: All instances failed"})
+        results.append({"error": f"SearXNG: all instances failed ({len(failures)} tried)"})
 
     return results
 
 
 def search_brave(query: str, limit: int = 5, api_key: str = None) -> List[Dict[str, str]]:
-    """Search using Brave Search API (needs API key)."""
+    """Search using Brave Search API (needs API key — NOT on the default path)."""
     if not api_key:
-        return [{"error": "Brave: API key required. Get free key at https://brave.com/search/api/"}]
+        return [{"error": "Brave: API key required (opt-in only, not used by default)"}]
 
-    results = []
     try:
-        params = urllib.parse.urlencode({
-            'q': query,
-            'count': limit,
-        })
+        params = urllib.parse.urlencode({"q": query, "count": limit})
         url = f"https://api.search.brave.com/res/v1/web/search?{params}"
-
         req = urllib.request.Request(url, headers={
-            'Accept': 'application/json',
-            'Accept-Encoding': 'gzip',
-            'X-Subscription-Token': api_key,
-        })
-
-        import gzip
-        ctx = ssl.create_default_context()
-
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-            data_bytes = resp.read()
-            # Try to decompress if gzip
-            try:
-                data_bytes = gzip.decompress(data_bytes)
-            except:
-                pass
-            data = json.loads(data_bytes.decode('utf-8'))
-
-        for item in data.get('web', {}).get('results', [])[:limit]:
-            results.append({
-                "url": item.get('url', ''),
-                "title": item.get('title', ''),
-                "description": item.get('description', '')
-            })
-
-    except Exception as e:
-        results.append({"error": f"Brave: {str(e)}"})
-
-    return results
-
-
-def search_wikipedia(query: str, limit: int = 5) -> List[Dict[str, str]]:
-    """Search Wikipedia OpenSearch as a low-friction fallback."""
-    try:
-        params = urllib.parse.urlencode({
-            "action": "opensearch",
-            "search": query,
-            "limit": limit,
-            "namespace": 0,
-            "format": "json",
-        })
-        url = f"https://en.wikipedia.org/w/api.php?{params}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "MiMoAgent/1.0 (tool fallback)",
             "Accept": "application/json",
+            "X-Subscription-Token": api_key,
+            "User-Agent": _UA,
         })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
 
-        titles = payload[1] if len(payload) > 1 else []
-        descriptions = payload[2] if len(payload) > 2 else []
-        urls = payload[3] if len(payload) > 3 else []
         results = []
-        for index, title in enumerate(titles[:limit]):
+        for item in data.get("web", {}).get("results", [])[:limit]:
             results.append({
-                "url": urls[index] if index < len(urls) else "",
-                "title": title,
-                "description": descriptions[index] if index < len(descriptions) else "",
+                "url": item.get("url", ""),
+                "title": item.get("title", ""),
+                "description": item.get("description", ""),
             })
-        return results or [{"error": "Wikipedia: no_results"}]
+        return results or [{"error": "Brave: no_results"}]
     except Exception as e:
-        return [{"error": f"Wikipedia: {str(e)}"}]
+        return [{"error": f"Brave: {str(e)}"}]
+
+
+def search_wikipedia(query: str, limit: int = 5, lang: str = None) -> List[Dict[str, str]]:
+    """Search Wikipedia via MediaWiki list=search (free, no key, returns snippets)."""
+    # Indonesian query heuristic: try id.wikipedia first, then en.
+    langs = [lang] if lang else (["id", "en"] if _looks_indonesian(query) else ["en", "id"])
+    failures: List[str] = []
+
+    for code in langs:
+        try:
+            params = urllib.parse.urlencode({
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "srlimit": limit,
+                "format": "json",
+            })
+            url = f"https://{code}.wikipedia.org/w/api.php?{params}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "MiMoAgent/1.0 (keyless search fallback)",
+                "Accept": "application/json",
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+
+            results = []
+            for item in payload.get("query", {}).get("search", [])[:limit]:
+                title = item.get("title", "")
+                snippet = unescape(re.sub(r"<[^>]+>", "", item.get("snippet", ""))).strip()
+                results.append({
+                    "url": f"https://{code}.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}",
+                    "title": title,
+                    "description": snippet,
+                })
+            if results:
+                return results
+            failures.append(f"{code}: no_results")
+        except Exception as e:
+            failures.append(f"{code}: {type(e).__name__}")
+
+    return [{"error": f"Wikipedia: {', '.join(failures)}"}]
+
+
+def _looks_indonesian(query: str) -> bool:
+    words = set(re.findall(r"[a-z]+", query.lower()))
+    hints = {
+        "apa", "siapa", "berapa", "kapan", "dimana", "mengapa", "bagaimana",
+        "yang", "dan", "atau", "tidak", "adalah", "dengan", "untuk", "dari",
+        "terbaru", "harga", "cara", "berita", "indonesia",
+    }
+    return bool(words & hints)
 
 
 # ─── Unified Search Interface ───────────────────────────────────────────────
 
-# Default engine priority
-_engine_priority = ["duckduckgo", "searxng", "wikipedia", "brave"]
-_active_engine = "duckduckgo"
+# Keyless engines only. Brave is opt-in via set_search_engine("brave", api_key=...).
+KEYLESS_ENGINES = ["ddgs", "duckduckgo", "searxng", "wikipedia"]
+ALL_ENGINES = KEYLESS_ENGINES + ["brave"]
+
+_engine_priority = list(KEYLESS_ENGINES)
+_active_engine = "ddgs"
 _brave_api_key = None
 _searxng_instance = None
 
 
 def set_search_engine(engine: str, api_key: str = None, instance: str = None):
-    """Set the active search engine."""
+    """Set the active search engine (must be one of ALL_ENGINES)."""
     global _active_engine, _brave_api_key, _searxng_instance
-    if engine in ("duckduckgo", "searxng", "wikipedia", "brave"):
+    if engine in ALL_ENGINES:
         _active_engine = engine
     if api_key:
         _brave_api_key = api_key
@@ -225,91 +274,93 @@ def set_search_engine(engine: str, api_key: str = None, instance: str = None):
     return _active_engine
 
 
+def _run_engine(engine: str, query: str, limit: int) -> List[Dict[str, str]]:
+    if engine == "ddgs":
+        return search_ddgs(query, limit)
+    if engine == "duckduckgo":
+        return search_duckduckgo(query, limit)
+    if engine == "searxng":
+        return search_searxng(query, limit, _searxng_instance)
+    if engine == "brave":
+        return search_brave(query, limit, _brave_api_key)
+    if engine == "wikipedia":
+        return search_wikipedia(query, limit)
+    return []
+
+
 def web_search(query: str, limit: int = 5) -> Dict[str, Any]:
     """
-    Search the web using the active engine with auto-fallback.
-    Tries engines in priority order if one fails.
+    Search the web using keyless engines with auto-fallback.
+    Brave is only tried when an API key was explicitly provided.
     """
-    engines_to_try = [_active_engine] + [e for e in _engine_priority if e != _active_engine]
+    order = [_active_engine] + [e for e in _engine_priority if e != _active_engine]
+    if _brave_api_key and "brave" not in order:
+        order.append("brave")
+
     failures: List[str] = []
 
-    for engine in engines_to_try:
+    for engine in order:
         try:
-            if engine == "duckduckgo":
-                results = search_duckduckgo(query, limit)
-            elif engine == "searxng":
-                results = search_searxng(query, limit, _searxng_instance)
-            elif engine == "brave":
-                results = search_brave(query, limit, _brave_api_key)
-            elif engine == "wikipedia":
-                results = search_wikipedia(query, limit)
-            else:
-                continue
-
-            # Check if we got real results (not just errors)
-            real_results = [r for r in results if "error" not in r]
-            failures.extend(r["error"] for r in results if isinstance(r, dict) and r.get("error"))
-            if real_results:
-                return {
-                    "engine": engine,
-                    "query": query,
-                    "results": real_results,
-                    "count": len(real_results)
-                }
-
+            results = _run_engine(engine, query, limit)
         except Exception as error:
             failures.append(f"{engine}: {error}")
             continue
 
-    # All engines failed
+        real_results = [r for r in results if "error" not in r]
+        failures.extend(
+            r["error"] for r in results if isinstance(r, dict) and r.get("error")
+        )
+        if real_results:
+            return {
+                "engine": engine,
+                "query": query,
+                "results": real_results,
+                "count": len(real_results),
+                "fallbacks_tried": failures or None,
+            }
+
     return {
         "engine": "none",
         "query": query,
         "results": [],
-        "error": "All search engines failed",
+        "error": "All keyless search engines failed",
         "failures": failures,
     }
 
 
 def get_search_status() -> Dict[str, Any]:
     """Get current search engine status."""
+    try:
+        import ddgs  # noqa: F401
+        ddgs_state = "installed"
+    except ImportError:
+        ddgs_state = "not installed (optional)"
+
     return {
         "active_engine": _active_engine,
-        "brave_api_key": "set" if _brave_api_key else "not set",
+        "keyless_priority": _engine_priority,
+        "ddgs": ddgs_state,
+        "brave_api_key": "set" if _brave_api_key else "not set (not required)",
         "searxng_instance": _searxng_instance or "auto (public instances)",
-        "available_engines": ["duckduckgo", "searxng", "wikipedia", "brave"]
+        "available_engines": ALL_ENGINES,
     }
 
 
 # ─── Test ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("Testing search engines...")
+    print("Testing keyless search engines...\n")
+    for name in KEYLESS_ENGINES:
+        print(f"=== {name} ===")
+        for r in _run_engine(name, "presiden indonesia", 3):
+            if "error" in r:
+                print(f"  ERROR: {r['error']}")
+            else:
+                print(f"  {r['title'][:60]}\n    {r['url'][:70]}")
+        print()
 
-    # Test DuckDuckGo
-    print("\n=== DuckDuckGo ===")
-    results = search_duckduckgo("python programming", 3)
-    for r in results:
-        if "error" not in r:
-            print(f"  {r['title'][:60]}")
-            print(f"  {r['url']}")
-        else:
-            print(f"  ERROR: {r['error']}")
-
-    # Test SearXNG
-    print("\n=== SearXNG ===")
-    results = search_searxng("python programming", 3)
-    for r in results:
-        if "error" not in r:
-            print(f"  {r['title'][:60]}")
-            print(f"  {r['url']}")
-        else:
-            print(f"  ERROR: {r['error']}")
-
-    # Test unified interface
-    print("\n=== Unified Search ===")
-    result = web_search("what is python", 3)
-    print(f"  Engine: {result['engine']}")
-    print(f"  Results: {result.get('count', 0)}")
-    for r in result.get('results', [])[:2]:
-        print(f"  - {r.get('title', 'N/A')[:50]}")
+    print("=== Unified ===")
+    out = web_search("berita teknologi terbaru", 3)
+    print(f"  engine={out['engine']} count={out.get('count', 0)}")
+    for r in out.get("results", [])[:3]:
+        print(f"  - {r.get('title', 'N/A')[:55]}")

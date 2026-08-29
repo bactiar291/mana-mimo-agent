@@ -272,7 +272,7 @@ class FakeMiMoClient:
         self.streams = list(streams)
         self.prompts = []
 
-    def chat_stream(self, prompt, web_search=True, enable_thinking=True):
+    def chat_stream(self, prompt, web_search=True, enable_thinking=True, max_thinking=True):
         self.prompts.append(prompt)
         if not self.streams:
             return iter(())
