@@ -17,11 +17,12 @@ Nothing is advertised that returns "not implemented" at call time.
 - **72 active tools** — files, code, git, shell, Python, web, browser, OCR, TTS, memory, skills, delegation
 - **Telegram gateway** — use it as a personal assistant in chat, with a live status card that updates in place while it works
 - **Browser automation** — headless anti-detect Chromium via DrissionPage, with a Playwright engine option
-- **Web research** — DuckDuckGo search with SearXNG/Wikipedia/Brave fallback, plus page extraction and raw HTTP
+- **Web research** — keyless search (ddgs aggregator → DuckDuckGo HTML → public SearXNG → Wikipedia API), plus page extraction and raw HTTP. No API key required.
 - **Persistent memory** — facts, preferences, and profile survive restarts
 - **Skills** — reusable markdown procedures the agent can read and write
 - **Subagent delegation** — hand an isolated task to a separate agent run
 - **Evidence-first answers** — the system prompt forbids describing tool output that was never received
+- **Max reasoning depth** — a mandatory decompose → execute → self-verify → falsify protocol before every non-trivial answer (`MIMO_TELEGRAM_MAX_THINKING=0` to disable)
 
 ### Honest limits
 
@@ -137,11 +138,11 @@ mimo-agent/
 │   └── ...                 # Optional subsystems (filtered out by default)
 ├── lib/
 │   ├── browser_engine.py   # DrissionPage / Playwright driver
-│   ├── search_engine.py    # Multi-engine search with fallback
+│   ├── search_engine.py    # Keyless multi-engine search (ddgs/DDG/SearXNG/Wikipedia)
 │   └── upgrade.py          # Learning log helpers
 ├── config/telegram.json    # Gateway config
 ├── skills/                 # Reusable markdown procedures
-├── tests/                  # pytest suite (60 tests)
+├── tests/                  # pytest suite (64 tests)
 ├── start_tg.py             # Telegram gateway entry point
 └── p.py                    # CLI entry point
 ```

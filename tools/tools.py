@@ -201,37 +201,21 @@ def _coerce_json(value: Any, default: Any) -> Any:
 # ─── Web Search ──────────────────────────────────────────────────────────────
 
 def _web_search(query: str, limit: int = 5) -> str:
-    """Search the web using DuckDuckGo (free) with SearXNG fallback."""
+    """Search the web with keyless engines (ddgs -> DuckDuckGo HTML -> SearXNG -> Wikipedia)."""
+    if not HAS_SEARCH_ENGINE:
+        return json.dumps({
+            "error": "search_engine module not importable — check lib/search_engine.py",
+            "results": [],
+        })
     try:
-        if HAS_SEARCH_ENGINE:
-            result = _search_engine.web_search(query, limit)
-            return json.dumps(result)
-        else:
-            # Fallback to direct DuckDuckGo
-            import requests
-            url = "https://html.duckduckgo.com/html/"
-            resp = requests.post(url, data={"q": query}, timeout=10, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            })
-            results = []
-            import re
-            links = re.findall(r'<a rel="nofollow" class="result__a" href="([^"]+)">([^<]+)</a>', resp.text)
-            snippets = re.findall(r'<a class="result__snippet"[^>]*>([^<]+)</a>', resp.text)
-            for i, (url, title) in enumerate(links[:limit]):
-                snippet = snippets[i] if i < len(snippets) else ""
-                results.append({
-                    "title": title.strip(),
-                    "url": url.strip(),
-                    "description": snippet.strip(),
-                })
-            return json.dumps({"results": results, "engine": "duckduckgo"})
+        return json.dumps(_search_engine.web_search(query, limit))
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": f"{type(e).__name__}: {e}", "results": []})
 
 
 register_tool(
     name="web_search",
-    description="Search the web for information. Returns search results with titles, URLs, and descriptions.",
+    description="Search the web (free, no API key: ddgs/DuckDuckGo/SearXNG/Wikipedia auto-fallback). Returns titles, URLs, descriptions.",
     parameters={
         "type": "object",
         "properties": {
@@ -246,33 +230,36 @@ register_tool(
 
 def _search_engine_set(engine: str, api_key: str = None, instance: str = None) -> str:
     """Switch search engine."""
+    if not HAS_SEARCH_ENGINE:
+        return json.dumps({"error": "search_engine module not importable"})
     try:
-        if HAS_SEARCH_ENGINE:
-            result = _search_engine.set_search_engine(engine, api_key, instance)
-            return json.dumps({"engine": result, "status": "switched"})
-        return json.dumps({"error": "search_engine module not available"})
+        valid = getattr(_search_engine, "ALL_ENGINES", [])
+        if valid and engine not in valid:
+            return json.dumps({"error": f"unknown engine {engine!r}", "available": valid})
+        result = _search_engine.set_search_engine(engine, api_key, instance)
+        return json.dumps({"engine": result, "status": "switched"})
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+
 def _search_engine_status() -> str:
     """Get search engine status."""
+    if not HAS_SEARCH_ENGINE:
+        return json.dumps({"error": "search_engine module not importable"})
     try:
-        if HAS_SEARCH_ENGINE:
-            status = _search_engine.get_search_status()
-            return json.dumps(status)
-        return json.dumps({"engine": "duckduckgo (basic)", "status": "search_engine module not available"})
+        return json.dumps(_search_engine.get_search_status())
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 register_tool(
     name="search_engine_set",
-    description="Switch search engine. Options: duckduckgo (free, default), searxng (free, self-hosted), brave (needs API key).",
+    description="Switch search engine. Keyless: ddgs (default), duckduckgo, searxng, wikipedia. brave needs an API key (opt-in).",
     parameters={
         "type": "object",
         "properties": {
-            "engine": {"type": "string", "description": "Engine: duckduckgo, searxng, or brave"},
-            "api_key": {"type": "string", "description": "Brave API key (only for brave engine)"},
+            "engine": {"type": "string", "description": "ddgs, duckduckgo, searxng, wikipedia, or brave"},
+            "api_key": {"type": "string", "description": "Brave API key (only for brave)"},
             "instance": {"type": "string", "description": "SearXNG instance URL (only for searxng)"},
         },
         "required": ["engine"],

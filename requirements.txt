@@ -4,3 +4,6 @@ DrissionPage>=4.0.0
 playwright>=1.40.0
 Pillow>=10.0.0
 beautifulsoup4>=4.12.0
+# Keyless web search aggregator (no API key). Optional: lib/search_engine.py
+# lazy-imports it and falls back to DuckDuckGo HTML / SearXNG / Wikipedia.
+ddgs>=9.16.0

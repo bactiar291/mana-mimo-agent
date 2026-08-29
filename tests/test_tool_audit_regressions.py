@@ -71,7 +71,9 @@ class ToolAuditRegressionTest(unittest.TestCase):
         self.assertEqual(results[0]["error"], "DuckDuckGo: blocked_by_challenge")
 
     def test_web_search_preserves_engine_failure_reasons(self):
-        with patch("lib.search_engine.search_duckduckgo", return_value=[{"error": "DuckDuckGo: blocked_by_challenge"}]), patch(
+        with patch("lib.search_engine.search_ddgs", return_value=[{"error": "ddgs: no results from any backend"}]), patch(
+            "lib.search_engine.search_duckduckgo", return_value=[{"error": "DuckDuckGo: blocked_by_challenge"}]
+        ), patch(
             "lib.search_engine.search_searxng", return_value=[{"error": "SearXNG: All instances failed"}]
         ), patch("lib.search_engine.search_wikipedia", return_value=[{"error": "Wikipedia: no_results"}]), patch(
             "lib.search_engine.search_brave", return_value=[{"error": "Brave: API key required"}]
@@ -80,8 +82,36 @@ class ToolAuditRegressionTest(unittest.TestCase):
 
         self.assertEqual(result["engine"], "none")
         self.assertIn("failures", result)
+        self.assertIn("ddgs: no results from any backend", result["failures"])
         self.assertIn("DuckDuckGo: blocked_by_challenge", result["failures"])
         self.assertIn("SearXNG: All instances failed", result["failures"])
+
+    def test_web_search_default_path_is_keyless(self):
+        """Brave (API-key engine) must never be on the default fallback chain."""
+        self.assertNotIn("brave", search_engine.KEYLESS_ENGINES)
+        self.assertEqual(search_engine._engine_priority, search_engine.KEYLESS_ENGINES)
+        self.assertIn("ddgs", search_engine.KEYLESS_ENGINES)
+
+    def test_web_search_skips_brave_without_key(self):
+        """With no Brave key set, Brave must not even be attempted."""
+        calls = []
+
+        def record(name):
+            def _inner(*a, **kw):
+                calls.append(name)
+                return [{"error": f"{name}: forced"}]
+            return _inner
+
+        with patch("lib.search_engine.search_ddgs", side_effect=record("ddgs")), patch(
+            "lib.search_engine.search_duckduckgo", side_effect=record("duckduckgo")
+        ), patch("lib.search_engine.search_searxng", side_effect=record("searxng")), patch(
+            "lib.search_engine.search_wikipedia", side_effect=record("wikipedia")
+        ), patch("lib.search_engine.search_brave", side_effect=record("brave")), patch(
+            "lib.search_engine._brave_api_key", None
+        ):
+            search_engine.web_search("example", 1)
+
+        self.assertNotIn("brave", calls)
 
     def test_root_launcher_imports_cli_main(self):
         launcher = importlib.import_module("p")

@@ -45,6 +45,10 @@ TELEGRAM_AGENT_RUNTIME = int(os.environ.get("MIMO_TELEGRAM_AGENT_RUNTIME", "900"
 TELEGRAM_REQUEST_TIMEOUT = int(os.environ.get("MIMO_TELEGRAM_REQUEST_TIMEOUT", "120"))
 # 0 means runtime-based execution: no fixed tool-count cap, while anti-loop and per-tool timeout guards stay active.
 TELEGRAM_MAX_TOOL_CALLS = int(os.environ.get("MIMO_TELEGRAM_MAX_TOOL_CALLS", "0"))
+# Max reasoning depth: keeps the server reasoning pass on and injects the
+# step-by-step + self-verification protocol into the system prompt.
+# Set MIMO_TELEGRAM_MAX_THINKING=0 for faster/shallower replies.
+TELEGRAM_MAX_THINKING = os.environ.get("MIMO_TELEGRAM_MAX_THINKING", "1") not in ("0", "false", "False")
 TELEGRAM_UPLOAD_LIMIT_BYTES = 49 * 1024 * 1024
 UPLOAD_EXTENSIONS = {
     ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus",
@@ -481,6 +485,7 @@ class MiMoTelegramBot:
             model="mimo-v2.5-pro",
             web_search=True,
             show_thinking=True,
+            max_thinking=TELEGRAM_MAX_THINKING,
             quiet=True,
             max_runtime=TELEGRAM_AGENT_RUNTIME,
             request_timeout=TELEGRAM_REQUEST_TIMEOUT,
@@ -1093,6 +1098,7 @@ class MiMoTelegramBot:
                 model="mimo-v2.5-pro",
                 web_search=True,
                 show_thinking=True,
+                max_thinking=TELEGRAM_MAX_THINKING,
                 quiet=True,
                 max_runtime=TELEGRAM_AGENT_RUNTIME,
                 request_timeout=TELEGRAM_REQUEST_TIMEOUT,

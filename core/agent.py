@@ -332,6 +332,39 @@ STYLE:
 """
 
 
+# Appended to SYSTEM_PROMPT. This is the ONLY working depth lever: probing the
+# MiMo endpoint (2026-08-29) showed modelConfig knobs like thinkingBudget /
+# reasoningEffort / enableDeepThinking are accepted (HTTP 200) but ignored.
+# Measured effect of this protocol on 2 hard reasoning tasks: answer length
+# +29% and +22% with an explicit verification pass; raw <think> length unchanged
+# (server-side budget). So: same reasoning budget, better use of it.
+REASONING_PROTOCOL = """
+=== REASONING PROTOCOL (MAX DEPTH, MANDATORY FOR NON-TRIVIAL TASKS) ===
+
+Trivial request (greeting, single fact you already verified, one-line edit)? Answer directly.
+Everything else — calculations, multi-step tasks, code changes, anything with a number
+or a claim about a real system — runs this protocol before the final answer:
+
+1. RESTATE: what is actually being asked, and what is the success condition?
+2. DECOMPOSE: list the sub-steps. Name what you know vs what you must look up or run.
+3. EXECUTE: work each step explicitly. Show the arithmetic/logic, don't skip to the result.
+4. VERIFY (do not skip): re-derive the answer a SECOND, different way — reverse the
+   calculation, re-run the check, re-read the file, test an edge case. If the two paths
+   disagree, say so and resolve it before answering.
+5. FALSIFY: actively look for what would make your answer wrong — off-by-one, wrong unit,
+   stale data, assumed-but-unverified file content, ambiguous wording.
+6. ANSWER: state the conclusion, then separate "verified:" (backed by a tool result in this
+   conversation) from "asumsi:" / "belum diverifikasi:".
+
+Hard rules:
+- Never state a number, filename, count, or status you did not obtain from a tool result here.
+- If a step failed or a tool was unavailable, report that instead of filling the gap by guessing.
+- If information is genuinely missing, say what is missing and what you would need — do not
+  produce a confident answer built on an assumption.
+- Uncertainty stated plainly beats a fluent wrong answer. Every time.
+"""
+
+
 def build_tools_description(tool_names: Optional[List[str]] = None) -> str:
     schemas = get_tools_schema()
     allowed = set(tool_names or [])
@@ -817,11 +850,13 @@ class MiMoAgent:
                  progress_callback: Optional[ProgressCallback] = None,
                  max_runtime: int = 180,
                  request_timeout: int = 75,
-                 max_tool_calls: int = 0):
+                 max_tool_calls: int = 0,
+                 max_thinking: bool = True):
         self.client = MiMoClient(model=model, timeout=request_timeout)
         self.history: List[Dict[str, str]] = []
         self.web_search = web_search
         self.show_thinking = show_thinking
+        self.max_thinking = max_thinking
         self.quiet = quiet
         self.max_tool_calls = max(0, int(max_tool_calls))
         self.max_runtime = max_runtime
@@ -1448,7 +1483,12 @@ class MiMoAgent:
             "- Final answers must be grounded in observed tool evidence when tools were used.\n"
             "- Never describe a tool result you did not receive. If a tool failed, report the failure.\n"
         )
-        sys_prompt = SYSTEM_PROMPT + tool_policy + f"\nAVAILABLE TOOLS DETAIL:\n{tools_desc}\n"
+        sys_prompt = (
+            SYSTEM_PROMPT
+            + (REASONING_PROTOCOL if self.max_thinking else "")
+            + tool_policy
+            + f"\nAVAILABLE TOOLS DETAIL:\n{tools_desc}\n"
+        )
 
         parts = [sys_prompt]
 
@@ -1784,7 +1824,10 @@ class MiMoAgent:
             is_tool_mode = False
 
             for kind, text in self.client.chat_stream(
-                prompt, web_search=self.web_search, enable_thinking=self.show_thinking
+                prompt,
+                web_search=self.web_search,
+                enable_thinking=self.show_thinking,
+                max_thinking=self.max_thinking,
             ):
                 if first_chunk and spinner:
                     spinner.stop()

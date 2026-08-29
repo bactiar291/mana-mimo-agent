@@ -155,10 +155,27 @@ class MiMoClient:
         web_search: bool = True,
         enable_thinking: Optional[bool] = None,
         event_mode: Optional[bool] = None,
+        max_thinking: bool = True,
     ) -> Generator:
+        """Stream a MiMo reply.
+
+        enable_thinking : surface <think> events to the caller (UI concern).
+        max_thinking    : always request the server's reasoning pass (payload level).
+
+        VERIFIED (probe against aistudio.xiaomimimo.com, 2026-08-29): the endpoint
+        accepts extra modelConfig keys with HTTP 200 but IGNORES them —
+        thinkingBudget / reasoningEffort / enableDeepThinking / temperature produced
+        no systematic change in <think> length (585/396/494/388 chars on the same
+        prompt, i.e. run-to-run noise). Only `enableThinking` and `model` are real.
+        So we do NOT send fake knobs here; depth is driven by the reasoning
+        protocol in the system prompt (see core/agent.py REASONING_PROTOCOL).
+        """
         if event_mode is None:
             event_mode = enable_thinking is not None
-        thinking_enabled = True if enable_thinking is None else bool(enable_thinking)
+        # enable_thinking controls DISPLAY; max_thinking keeps the reasoning pass on.
+        thinking_enabled = True if max_thinking else (
+            True if enable_thinking is None else bool(enable_thinking)
+        )
 
         payload = {
             "msgId": new_id(),
