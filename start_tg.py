@@ -31,9 +31,16 @@ STATUS_CARD = os.path.join(ASSET_DIR, "mimo_status_0.png")
 TELEGRAM_TOKEN_RE = re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{20,}\b")
 TELEGRAM_BOT_URL_RE = re.compile(r"bot\d{6,}:[A-Za-z0-9_-]+")
 TELEGRAM_MESSAGE_LIMIT = 3900
-PROCESS_UPDATE_INTERVAL = 1.2
+# How often the feed loop wakes up. Small enough that the spinner reads as motion.
+PROCESS_UPDATE_INTERVAL = 0.7
+# Minimum gap between two edits of the same status message (Bot API rate safety).
+PROCESS_EDIT_MIN_INTERVAL = 1.1
+# Telegram clears the "typing…" bubble after ~5s, so refresh it well before that.
+TYPING_REFRESH_SECONDS = 3.5
 PROCESS_ANIMATION_INTERVAL = 2.4
 PROCESS_HEARTBEAT_SECONDS = 10
+# How many collapsed action lines the live timeline keeps visible (Hermes-style).
+PROCESS_TIMELINE_LINES = 12
 TELEGRAM_AGENT_RUNTIME = int(os.environ.get("MIMO_TELEGRAM_AGENT_RUNTIME", "900"))
 TELEGRAM_REQUEST_TIMEOUT = int(os.environ.get("MIMO_TELEGRAM_REQUEST_TIMEOUT", "120"))
 # 0 means runtime-based execution: no fixed tool-count cap, while anti-loop and per-tool timeout guards stay active.
@@ -112,14 +119,100 @@ def ignore_sighup():
 class MiMoTelegramBot:
     """Telegram bot with subagent support (DeerFlow/OpenClaw pattern)."""
     
-    def __init__(self, token: str, chat_id: str):
+    def __init__(self, token: str, owner_chat_id: str, admin_chat_ids=None, admin_password: str = ""):
         self.token = token
-        self.chat_id = chat_id
+        self.owner_chat_id = str(owner_chat_id).strip()
+        self.admin_chat_ids = {str(chat_id).strip() for chat_id in (admin_chat_ids or []) if str(chat_id).strip()}
+        self.allowed_chat_ids = {self.owner_chat_id, *self.admin_chat_ids} if self.owner_chat_id else set(self.admin_chat_ids)
+        self.admin_password = str(admin_password or "").strip()
+        self.unlocked_admin_chats = set()
+        self.admin_unlock_timestamps = {}
         self.logger = setup_logging()
         self.agent = None
         self.subagents = {}  # Track subagent tasks
         self.agent_lock = asyncio.Lock()
         self.last_files_by_chat = {}
+        self._access_denied_notice_sent = set()
+        self._admin_unlock_notice_sent = set()
+
+    def _chat_role(self, update) -> str | None:
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        if not chat_id:
+            return None
+        if chat_id == self.owner_chat_id:
+            return "owner"
+        if chat_id in self.admin_chat_ids:
+            return "admin"
+        return None
+
+    def _is_allowed_chat(self, update) -> bool:
+        role = self._chat_role(update)
+        if role == "owner":
+            return True
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        return bool(chat_id and chat_id in self.unlocked_admin_chats)
+
+    def _is_unlocked_admin(self, update) -> bool:
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        return bool(chat_id and chat_id in self.unlocked_admin_chats)
+
+    def _is_admin_chat(self, update) -> bool:
+        return self._chat_role(update) == "admin"
+
+    async def _deny_unauthorized(self, update, reason: str = ""):
+        try:
+            msg = ""
+            if reason:
+                msg = reason
+            if getattr(update, "message", None) and msg:
+                await update.message.reply_text(msg)
+        except Exception:
+            pass
+
+    async def _prompt_admin_unlock(self, update):
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        if not chat_id or chat_id in self._admin_unlock_notice_sent:
+            return
+        self._admin_unlock_notice_sent.add(chat_id)
+        try:
+            if getattr(update, "message", None):
+                await update.message.reply_text("🔐 Admin mode. Kirim: `unlock <password>`", parse_mode='Markdown')
+        except Exception:
+            pass
+
+    def _unlock_admin_chat(self, update, password: str) -> bool:
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        if not chat_id:
+            return False
+        if self.admin_password and password == self.admin_password:
+            self.unlocked_admin_chats.add(chat_id)
+            self.admin_unlock_timestamps[chat_id] = time.time()
+            return True
+        return False
+
+    def _is_admin_unlocked(self, update) -> bool:
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        if not chat_id or chat_id not in self.unlocked_admin_chats:
+            return False
+        ttl = 600
+        ts = self.admin_unlock_timestamps.get(chat_id, 0)
+        if ts and (time.time() - ts) <= ttl:
+            return True
+        self.unlocked_admin_chats.discard(chat_id)
+        self.admin_unlock_timestamps.pop(chat_id, None)
+        return False
+
+    def _refresh_admin_unlock(self, update):
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+        if chat_id in self.unlocked_admin_chats:
+            self.admin_unlock_timestamps[chat_id] = time.time()
         
     def start(self):
         """Start the Telegram bot."""
@@ -142,7 +235,7 @@ class MiMoTelegramBot:
             
             # Start bot
             self.logger.info(f"✅ Telegram gateway aktif!")
-            self.logger.info(f"   Chat ID: {self.chat_id}")
+            self.logger.info(f"   Owner Chat ID: {self.owner_chat_id}")
             
             # Run the bot. python-telegram-bot's run_polling() is synchronous.
             application.run_polling(drop_pending_updates=True)
@@ -190,11 +283,18 @@ class MiMoTelegramBot:
         except Exception:
             return {}
 
+    def _tool_profile_name(self) -> str:
+        try:
+            from tools.tool_profile import active_profile
+            return active_profile()
+        except Exception:
+            return "unknown"
+
     def _help_text(self, tool_count: int = None) -> str:
         tool_count = self._tool_count() if tool_count is None else tool_count
         return (
             "📚 **MiMo Agent Help**\n\n"
-            f"**Tools: {tool_count}** runtime-registered tools\n"
+            f"**Tools: {tool_count}** aktif (profil: {self._tool_profile_name()})\n"
             "Model: mimo-v2.5-pro\n\n"
             "**Commands:**\n"
             "/start — Start bot\n"
@@ -203,14 +303,12 @@ class MiMoTelegramBot:
             "/tools — Show tool categories\n"
             "/delegate <task> — Delegate task to subagent\n"
             "/tasks — List delegated tasks\n\n"
-            "**Features:**\n"
-            "• Dynamic tool registry\n"
-            "• Multi-agent delegation\n"
-            "• Session search / recall\n"
-            "• Memory + skills\n"
-            "• Browser/web automation\n"
-            "• Vision/Image + Voice/TTS\n"
-            "• Cron, webhooks, MCP, checkpoints\n\n"
+            "**Yang benar-benar jalan:**\n"
+            "• File, code, git, terminal, Python\n"
+            "• Web search + extract + HTTP request\n"
+            "• Browser automation (Chromium headless)\n"
+            "• Memory, skills, todo, delegasi subagent\n"
+            "• OCR (tesseract), screenshot, TTS (edge-tts)\n\n"
             "Ketik pesan biasa untuk chat langsung."
         )
 
@@ -218,8 +316,9 @@ class MiMoTelegramBot:
         tool_count = self._tool_count() if tool_count is None else tool_count
         audit_summary = self._tool_audit_summary() if audit_summary is None else audit_summary
         return (
-            "📊 **MiMo Agent Status**\n\n"
+            "📊 MiMo Agent Status\n\n"
             f"• Tools: {tool_count}\n"
+            f"• Profil tool: {self._tool_profile_name()}\n"
             f"• Safe smoke: {audit_summary.get('safe_smoke', 0)}\n"
             f"• External/stateful: {audit_summary.get('external_or_stateful', 0)}\n"
             f"• Destructive/write: {audit_summary.get('destructive_or_write', 0)}\n"
@@ -233,49 +332,86 @@ class MiMoTelegramBot:
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command."""
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
         await update.message.reply_text(
-            "🤖 **MiMo Agent** — Super Agentic Assistant\n\n"
+            "🤖 MiMo Agent\n\n"
             "Saya MiMo, model bahasa besar dari Xiaomi LLM Core Team.\n\n"
-            + self._help_text(),
-            parse_mode='Markdown'
+            + self._help_text()
         )
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
-        await update.message.reply_text(self._help_text(), parse_mode='Markdown')
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
+        await update.message.reply_text(self._help_text())
     
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command."""
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
         try:
-            await update.message.reply_text(self._status_text(), parse_mode='Markdown')
+            role = self._chat_role(update)
+            text = self._status_text()
+            if role == "admin":
+                text += "\n\nRole: admin"
+            elif role == "owner":
+                text += "\n\nRole: owner"
+            await update.message.reply_text(text)
         except Exception as e:
             await update.message.reply_text(f"❌ Error getting status: {e}")
 
     async def cmd_tools(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /tools command — show total tools and categories."""
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
         try:
             tool_count = self._tool_count()
             audit = self._tool_audit_summary()
             text = (
-                "🧰 **MiMo Tools**\n\n"
-                f"Total tools: {tool_count}\n"
+                "🧰 MiMo Tools\n\n"
+                f"Total tools aktif: {tool_count}\n"
+                f"Profil: {self._tool_profile_name()}\n"
                 f"Safe smoke: {audit.get('safe_smoke', 0)}\n"
                 f"External/stateful: {audit.get('external_or_stateful', 0)}\n"
                 f"Destructive/write guarded: {audit.get('destructive_or_write', 0)}\n"
                 f"Expected-fail guarded: {audit.get('expected_failure', 0)}\n\n"
-                "Core features:\n"
-                "• Web/search + browser automation\n"
-                "• File/code/git/terminal tools\n"
-                "• Memory, skills, session search\n"
-                "• Delegate/subagents, cron, webhooks\n"
-                "• Vision, voice/TTS, MCP, checkpoints"
+                "Kategori:\n"
+                "• File/code/git/terminal/Python\n"
+                "• Web search, extract, HTTP, download\n"
+                "• Browser automation (Chromium headless)\n"
+                "• Memory, skills, todo, delegasi subagent\n"
+                "• OCR + screenshot + TTS (binary-backed)\n\n"
+                "Set MIMO_TOOL_PROFILE=full untuk membuka seluruh registry lama."
             )
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(text)
         except Exception as e:
             await update.message.reply_text(f"❌ Error getting tools: {e}")
     
     async def cmd_delegate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /delegate command — DeerFlow-inspired subagent delegation."""
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
         try:
             # Get task from command args
             task = " ".join(context.args) if context.args else ""
@@ -358,6 +494,12 @@ class MiMoTelegramBot:
     
     async def cmd_tasks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /tasks command — list active tasks."""
+        if not self._is_allowed_chat(update):
+            await self._deny_unauthorized(update)
+            return
+        if self._chat_role(update) == "admin" and not self._is_admin_unlocked(update):
+            await self._prompt_admin_unlock(update)
+            return
         if not self.subagents:
             await update.message.reply_text("📋 No active tasks.")
             return
@@ -395,35 +537,103 @@ class MiMoTelegramBot:
             return "CHROMIUM"
         return "TOOL"
 
+    def _sanitize_progress_detail(self, value: Any, limit: int = 180) -> str:
+        """Keep live Telegram telemetry useful without leaking credentials."""
+        text = str(value or "")
+        text = redact_tokens(text)
+        # Credentials may appear in commands, headers, URLs, or tool arguments.
+        text = re.sub(
+            r"(?i)(authorization\s*[:=]\s*(?:bearer|basic)\s+)([^\s'\"`,;]+)",
+            r"\1[REDACTED]",
+            text,
+        )
+        text = re.sub(
+            r"(?i)(x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|session|cookie|password|secret)"
+            r"(\s*[:=]\s*)([^\s'\"`,;&]+)",
+            r"\1\2[REDACTED]",
+            text,
+        )
+        text = re.sub(
+            r"(?i)([?&](?:token|access_token|api_key|key|signature|sig|password|secret|session)=)([^&#\s]+)",
+            r"\1[REDACTED]",
+            text,
+        )
+        text = re.sub(r"\s+", " ", text).strip()
+        return text if len(text) <= limit else text[:limit - 1] + "…"
+
+    def _short_path(self, detail: str) -> str:
+        """Hermes-style target: keep 'name.py L10-42', drop long parent dirs."""
+        detail = (detail or "").strip()
+        if not detail:
+            return ""
+        lines_suffix = ""
+        match = re.search(r"\s(L\d+(?:-\d+|\+)?)$", detail)
+        if match:
+            lines_suffix = " " + match.group(1)
+            detail = detail[: match.start()].strip()
+        if detail.startswith("/") and detail.count("/") > 2:
+            detail = os.path.basename(detail) or detail
+        return f"{detail}{lines_suffix}"
+
+    def _tool_activity_line(self, tool: str, detail: str) -> str:
+        """Translate real tool starts into short Hermes-style, privacy-safe activity."""
+        detail = self._sanitize_progress_detail(detail, 120)
+        if tool == "skill_view":
+            return f"📚 Reading skill {detail or '…'}"
+        if tool in {"skills_list", "skill_auto_load"}:
+            return "📚 Checking available skills"
+        if tool == "read_file":
+            return f"📖 Reading {self._short_path(detail) or 'file'}"
+        if tool in {"write_file", "append_file"}:
+            return f"✍️ Writing {self._short_path(detail) or 'file'}"
+        if tool in {"patch_file", "replace_in_file"}:
+            return f"🔧 Editing {self._short_path(detail) or 'file'}"
+        if tool == "search_files":
+            path_match = re.search(r"(?:\bin\s+|\bpath[=:]\s*)([^\s,]+)", detail, re.IGNORECASE)
+            path = path_match.group(1) if path_match else "project files"
+            return f"🔎 Searching files in {path}"
+        if tool in {"todo", "kanban_task", "kanban_move", "kanban_complete", "supervisor_plan", "supervisor_execute", "supervisor_adapt"}:
+            return "📋 Updating tasks"
+        if tool == "web_search":
+            # Search terms can contain private identifiers; show the action, not the query.
+            return "🌐 Searching web"
+        if tool == "web_extract":
+            return "📄 Reading web page"
+        if tool in {"browser_open", "nodriver_open"}:
+            host_match = re.search(r"https?://([^/\s?#]+)", detail, re.IGNORECASE)
+            host = host_match.group(1) if host_match else "website"
+            return f"🌐 Opening {host}"
+        if tool in {"browser_click", "nodriver_click"}:
+            return "👆 Clicking page element"
+        if tool in {"browser_type", "nodriver_type"}:
+            return "⌨️ Filling page form"
+        if tool.startswith("browser_") or tool.startswith("nodriver_"):
+            return "🌐 Using browser"
+        if tool == "terminal":
+            cmd = self._sanitize_progress_detail(detail, 60)
+            return f"💻 Running terminal{f' {cmd}' if cmd else ''}"
+        if tool in {"execute_python", "sandbox_execute"}:
+            head = self._sanitize_progress_detail(detail, 48)
+            return f"🐍 Running code{f' {head}…' if head else ''}"
+        if tool == "session_search":
+            return "🔍 Searching session history"
+        if tool == "delegate_task":
+            return "🚀 Delegating subtask"
+        if tool in {"memory", "memory_enhanced"}:
+            return "🧠 Updating memory"
+        if tool == "vision_analyze":
+            return "👁️ Analyzing image"
+        if tool in {"voice_tts", "text_to_speech"}:
+            return "🔊 Generating audio"
+        return f"⚙️ Running {tool or 'tool'}"
+
     def _format_event_line(self, event: Dict[str, Any]) -> str:
         kind = event.get("event", "progress")
-        detail = str(event.get("detail", "") or "").strip()
-        tool = event.get("tool", "")
+        detail = self._sanitize_progress_detail(event.get("detail", ""), 120)
+        tool = self._sanitize_progress_detail(event.get("tool", ""), 60)
 
         if len(detail) > 90:
             detail = detail[:89] + "…"
-
-        # Tool-specific emojis (Hermes-style)
-        tool_emojis = {
-            "web_search": "🌐",
-            "web_extract": "📄",
-            "read_file": "📖",
-            "write_file": "✏️",
-            "terminal": "💻",
-            "browser_open": "🌐",
-            "browser_click": "👆",
-            "browser_type": "⌨️",
-            "sandbox_execute": "🐍",
-            "delegate_task": "🚀",
-            "session_search": "🔍",
-            "vision_analyze": "👁️",
-            "voice_tts": "🔊",
-            "memory_enhanced": "🧠",
-            "thinking_analyze": "💭",
-            "supervisor_plan": "📋",
-        }
-        
-        emoji = tool_emojis.get(tool, "⚙️")
 
         if kind == "queued":
             return f"📥 Queued: {detail or 'Task masuk antrean'}"
@@ -432,19 +642,20 @@ class MiMoTelegramBot:
         if kind == "budget_warning":
             return f"⚠️ Budget: {detail}"
         if kind == "tool_start":
-            return f"{emoji} {tool} args: {detail}"
+            return self._tool_activity_line(tool, detail)
         if kind == "tool_args_adjusted":
             return f"🧯 Guard {tool}: {detail}"
         if kind in ("tool_end", "tool_result"):
             duration = event.get("duration", 0)
             status = str(event.get("status", "ok")).upper()
             icon = "✅" if status == "OK" else "❌"
+            action = self._tool_activity_line(tool, "").split(" • ", 1)[0]
             next_step = str(event.get("next_step", "") or "").strip()
             if len(next_step) > 70:
                 next_step = next_step[:69] + "…"
-            line = f"{icon} {tool} {status} ({duration:.1f}s): {detail}"
+            line = f"{icon} {action} {status} ({duration:.1f}s): {detail}"
             if next_step:
-                line += f" | next: {next_step}"
+                line += f" | next: {self._sanitize_progress_detail(next_step, 70)}"
             return line
         if kind == "retry":
             return f"🔄 Retry needed {tool}: {detail}"
@@ -675,18 +886,85 @@ class MiMoTelegramBot:
             self.logger.debug("Dynamic process card render failed: %s", e)
             return self._process_card_path(frame_index)
 
-    def _process_caption(self, events: List[Dict[str, Any]], started: float, idle: float) -> str:
-        """Tiny Telegram progress caption.
+    def _progress_message_for_event(self, event: Dict[str, Any]) -> Optional[str]:
+        """Return one safe Telegram message for one real execution event.
 
-        Keep noisy executor/tool traces out of chat. The detailed trace stays in
-        logs/tests; Telegram only needs to reassure the user that MiMo is still
-        working.
+        Planning and model-thought events are intentionally quiet: the chat receives
+        only observable task steps, in the order the agent actually emits them.
         """
+        visible_events = {
+            "tool_start", "tool_end", "tool_result", "tool_args_adjusted",
+            "retry", "fallback", "timeout", "model_error", "browser_lifecycle",
+        }
+        if event.get("event") not in visible_events:
+            return None
+        return self._sanitize_progress_detail(self._format_event_line(event), TELEGRAM_MESSAGE_LIMIT)
+
+    def _process_caption(self, events: List[Dict[str, Any]], started: float, idle: float) -> str:
+        """Render a compact, truthful live execution timeline for Telegram."""
         elapsed = self._format_elapsed(time.monotonic() - started)
+        # Braille spinner: 10 frames at ~8 fps reads as continuous motion while the
+        # message is edited in place, the same feel as the Hermes CLI spinner.
+        spinner_frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        frame = spinner_frames[int(time.monotonic() * 8) % len(spinner_frames)]
+        current = events[-1] if events else {"event": "queued", "detail": "Task diterima"}
+        current_line = self._format_event_line(current)
+        current_line = self._sanitize_progress_detail(current_line, 280)
+        stage = self._event_stage(current)
+        tool_calls = current.get("tool_calls")
+        max_tool_calls = current.get("max_tool_calls")
+        tool_progress = ""
+        if isinstance(tool_calls, int):
+            cap = "∞" if not isinstance(max_tool_calls, int) or max_tool_calls >= 1_000_000 else str(max_tool_calls)
+            tool_progress = f" • tool {tool_calls}/{cap}"
+
+        # Keep high-signal execution evidence. Suppress repetitive thinking and
+        # planning chatter, but retain actual tool starts/results/errors/fallbacks.
+        trace_events = [
+            event for event in events
+            if event.get("event") in {
+                "tool_start", "tool_args_adjusted",
+                "retry", "fallback", "timeout", "model_error", "browser_lifecycle",
+            }
+        ]
+        # Collapse consecutive identical actions into "line (×N)" the way the Hermes
+        # timeline does, so a loop of reads/edits stays readable instead of scrolling.
+        collapsed: List[List[Any]] = []
+        for event in trace_events:
+            line = self._sanitize_progress_detail(self._format_event_line(event), 280)
+            if not line:
+                continue
+            if collapsed and collapsed[-1][0] == line:
+                collapsed[-1][1] += 1
+            else:
+                collapsed.append([line, 1])
+
+        trace_lines: List[str] = []
+        for line, count in collapsed[-PROCESS_TIMELINE_LINES:]:
+            trace_lines.append(line if count == 1 else f"{line} (×{count})")
+
+        total_actions = sum(count for _, count in collapsed)
+        hidden = total_actions - sum(
+            count for _, count in collapsed[-PROCESS_TIMELINE_LINES:]
+        )
+
+        lines = [
+            f"🤖 MiMo Agent • LIVE {frame}",
+            f"⏱ {elapsed} • {stage}{tool_progress}",
+            "",
+            "▶️ Sekarang",
+            current_line,
+        ]
+        if trace_lines:
+            lines.extend(["", f"📜 Timeline ({total_actions} aksi)"])
+            if hidden > 0:
+                lines.append(f"… {hidden} aksi sebelumnya")
+            lines.extend(trace_lines)
         if idle >= PROCESS_HEARTBEAT_SECONDS:
-            return f"MiMo masih jalan... ({elapsed})"
-        dot_count = int(time.monotonic() - started) % 3 + 1
-        return f"MiMo lagi jalan{'.' * dot_count} ({elapsed})"
+            lines.extend(["", "⌛ Menunggu respons tool/model — task masih aktif."])
+
+        caption = "\n".join(lines)
+        return caption[:TELEGRAM_MESSAGE_LIMIT - 24] + ("…" if len(caption) >= TELEGRAM_MESSAGE_LIMIT else "")
 
     def _process_card_path(self, frame_index: int = 0) -> str:
         frames = sorted(glob.glob(STATUS_CARD_PATTERN))
@@ -697,78 +975,52 @@ class MiMoTelegramBot:
         return frames[frame_index % len(frames)]
 
     async def _send_process_card(self, update, caption: str, frame_index: int = 0, card_path: str = ""):
-        card_path = card_path or self._process_card_path(frame_index)
-        if card_path:
-            try:
-                with open(card_path, "rb") as image:
-                    return await update.message.reply_photo(photo=image, caption=caption)
-            except Exception as e:
-                self.logger.debug("Progress card send failed: %s", e)
+        """Send lightweight text-only progress, not photo cards.
+
+        User asked for Hermes-style live typing/progress instead of image reloads.
+        We still keep the progress feed + typing indicator, but the visible message is
+        always plain text so Telegram updates feel native and smoother.
+        """
         return await update.message.reply_text(caption)
 
     async def _edit_process_card(self, status_message, caption: str, frame_index: int = 0, card_path: str = ""):
         try:
-            if getattr(status_message, "photo", None):
-                card_path = card_path or self._process_card_path(frame_index)
-                if card_path:
-                    try:
-                        from telegram import InputMediaPhoto
-                        with open(card_path, "rb") as image:
-                            media = InputMediaPhoto(media=image, caption=caption)
-                            await status_message.edit_media(media=media)
-                            return
-                    except Exception as e:
-                        message = str(e).lower()
-                        if "message is not modified" not in message:
-                            self.logger.debug("Progress media update failed: %s", e)
-                await status_message.edit_caption(caption=caption)
-            else:
-                await status_message.edit_text(caption)
+            await status_message.edit_text(caption)
         except Exception as e:
             message = str(e).lower()
             if "message is not modified" not in message:
                 self.logger.debug("Progress update failed: %s", e)
 
     async def _process_feed(self, update, context, progress_queue, stop_event: asyncio.Event):
-        """Show a single auto-cleaned process card fed by real agent events."""
+        """Hermes-style live status: ONE message, edited smoothly in place.
+
+        Instead of spamming the chat with one message per tool event, the gateway
+        keeps a single status message and rewrites it as the task progresses. The
+        spinner keeps animating even while a slow tool is running, so the chat
+        never looks frozen, and Telegram's native typing indicator stays warm.
+
+        Returns the status message so the caller can delete it before sending the
+        real answer.
+        """
         try:
             from telegram.constants import ChatAction
         except Exception:
             ChatAction = None
 
-        status_message = None
-        chat_key = self._chat_key(update)
-        start_time = time.monotonic()
-        last_typing = 0.0
-        last_update = 0.0
-        last_event_time = start_time
-        frame_index = 0
+        started = time.monotonic()
         events: List[Dict[str, Any]] = []
+        status_message = None
+        last_caption = ""
+        last_edit = 0.0
+        last_typing = 0.0
+        last_event_at = started
 
         try:
-            initial_card = self._render_process_card(events, start_time, 0.0, frame_index, chat_key)
-            status_message = await self._send_process_card(
-                update,
-                self._process_caption(events, start_time, 0.0),
-                frame_index,
-                initial_card,
-            )
-
             while not stop_event.is_set() or not progress_queue.empty():
                 now = time.monotonic()
-                changed = False
 
-                while True:
-                    try:
-                        event = progress_queue.get_nowait()
-                    except queue.Empty:
-                        break
-                    events.append(event)
-                    last_event_time = now
-                    changed = True
-
-                # Keep typing animation active (every 2 seconds)
-                if ChatAction and now - last_typing >= 2.0:
+                # Keep the native "typing…" bubble alive (Telegram expires it ~5s).
+                if ChatAction and now - last_typing >= TYPING_REFRESH_SECONDS:
                     try:
                         await context.bot.send_chat_action(
                             chat_id=update.effective_chat.id,
@@ -778,43 +1030,39 @@ class MiMoTelegramBot:
                         self.logger.debug("Typing action failed: %s", e)
                     last_typing = now
 
-                idle = now - last_event_time
-                heartbeat = idle >= PROCESS_HEARTBEAT_SECONDS and now - last_update >= PROCESS_HEARTBEAT_SECONDS
-                animate = (
-                    bool(getattr(status_message, "photo", None))
-                    and now - last_update >= PROCESS_ANIMATION_INTERVAL
-                )
-                if status_message and (changed or heartbeat or animate or now - last_update >= 20):
-                    frame_index += 1
-                    card_path = self._render_process_card(events, start_time, idle, frame_index, chat_key)
-                    await self._edit_process_card(
-                        status_message,
-                        self._process_caption(events, start_time, idle),
-                        frame_index,
-                        card_path,
-                    )
-                    last_update = now
+                drained = False
+                while True:
+                    try:
+                        events.append(progress_queue.get_nowait())
+                        drained = True
+                    except queue.Empty:
+                        break
+                if drained:
+                    last_event_at = time.monotonic()
+
+                idle = time.monotonic() - last_event_at
+                caption = self._process_caption(events, started, idle)
+
+                # Edit only when the text actually changed and the rate limit allows
+                # it. The spinner frame inside the caption changes over time, so this
+                # produces smooth motion without hammering the Bot API.
+                if caption != last_caption and time.monotonic() - last_edit >= PROCESS_EDIT_MIN_INTERVAL:
+                    if status_message is None:
+                        try:
+                            status_message = await update.message.reply_text(caption)
+                            last_caption = caption
+                            last_edit = time.monotonic()
+                        except Exception as e:
+                            self.logger.debug("Progress card send failed: %s", e)
+                    else:
+                        await self._edit_process_card(status_message, caption)
+                        last_caption = caption
+                        last_edit = time.monotonic()
 
                 if await self._sleep_or_stop(stop_event, PROCESS_UPDATE_INTERVAL):
                     break
 
-            while not progress_queue.empty():
-                try:
-                    events.append(progress_queue.get_nowait())
-                except queue.Empty:
-                    break
-
-            if status_message:
-                frame_index += 1
-                card_path = self._render_process_card(events, start_time, 0.0, frame_index, chat_key)
-                await self._edit_process_card(
-                    status_message,
-                    self._process_caption(events, start_time, 0.0),
-                    frame_index,
-                    card_path,
-                )
             return status_message
-
         except Exception as e:
             self.logger.debug("Process feed failed: %s", e)
             return status_message
@@ -824,7 +1072,9 @@ class MiMoTelegramBot:
             f"{message}\n\n"
             "[Telegram gateway context: pesan ini datang dari chat Telegram yang sudah authenticated. "
             "Jangan minta bot token atau chat id untuk mengirim hasil ke chat ini. "
-            "Jika kamu membuat audio, screenshot, gambar, atau dokumen lokal, sebutkan path file lokalnya; "
+            "Gaya balasan harus Hermes-like tapi aman untuk Telegram: pakai bullet list, key: value, dan tabel markdown sederhana bila benar-benar perlu. "
+            "Jangan pakai box-drawing terminal, ASCII art, atau tabel Unicode karena sering rusak di chat. "
+            "Kalau kamu membuat audio, screenshot, gambar, atau dokumen lokal, sebutkan path file lokalnya; "
             "gateway Telegram akan upload file itu otomatis ke chat yang sama. "
             "Jika user bilang 'kirim di sini', gunakan file lokal terakhir yang relevan dari percakapan.]"
         )
@@ -870,7 +1120,7 @@ class MiMoTelegramBot:
 
     def _chat_key(self, update) -> str:
         chat = getattr(update, "effective_chat", None)
-        return str(getattr(chat, "id", self.chat_id or "default"))
+        return str(getattr(chat, "id", self.owner_chat_id or "default"))
 
     def _valid_upload_file(self, path: str) -> bool:
         path = os.path.abspath(os.path.expanduser(path.strip()))
@@ -1003,6 +1253,28 @@ class MiMoTelegramBot:
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle regular messages."""
+        text = (update.message.text or "").strip()
+        role = self._chat_role(update)
+        chat = getattr(update, "effective_chat", None)
+        chat_id = str(getattr(chat, "id", ""))
+
+        # Universal admin trigger: prompt generic password request.
+        if text.lower() == "admin":
+            await self._prompt_admin_unlock(update)
+            return
+
+        # Unlock attempts are only accepted after the chat is already intended to be admin-capable.
+        if text.lower().startswith("unlock "):
+            password = text.split(" ", 1)[1].strip()
+            if self._unlock_admin_chat(update, password):
+                await update.message.reply_text("✅ Admin unlocked.")
+            return
+
+        # Silent ignore for everyone except owner and unlocked admins.
+        if role != "owner" and not self._is_admin_unlocked(update):
+            return
+
+        self._refresh_admin_unlock(update)
         status_message = None
         stop_event = asyncio.Event()
         feed_task = None
@@ -1081,7 +1353,9 @@ def main():
     config = load_config()
     
     token = config.get("telegram_token", "")
-    chat_id = config.get("telegram_chat_id", "")
+    owner_chat_id = config.get("telegram_chat_id", "")
+    admin_chat_ids = config.get("telegram_admin_chat_ids", [])
+    admin_password = config.get("telegram_admin_password", "kepungan01")
     
     if not token:
         print("❌ No Telegram token configured!")
@@ -1089,11 +1363,12 @@ def main():
         sys.exit(1)
     
     # Create and start bot
-    bot = MiMoTelegramBot(token, chat_id)
+    bot = MiMoTelegramBot(token, owner_chat_id, admin_chat_ids, admin_password)
     
     print(f"✅ Telegram gateway aktif!")
     print("   Token: configured")
-    print(f"   Chat ID: {chat_id}")
+    print(f"   Owner chat ID: {owner_chat_id}")
+    print(f"   Admin chats: {len(admin_chat_ids) if isinstance(admin_chat_ids, list) else 0}")
     
     bot.start()
 

@@ -261,9 +261,10 @@ GOAL-TARGETING:
 
 === RESPONSE FORMAT RULES (MANDATORY!) ===
 
-- Respond in PLAIN TEXT only. No markdown tables, no box-drawing, no ASCII art, no fancy formatting.
+- Respond in PLAIN TEXT only. Use Telegram-safe formatting when the channel is chat-like.
 - Use simple bullet points (- xxxxx) for lists.
 - Use **bold** ONLY for critical info (errors, file paths, status).
+- For structured data in chat, prefer bullet lists or simple key: value lines; avoid box-drawing unless the terminal explicitly benefits from it.
 - Keep responses SHORT. One-liners preferred. Only expand when the topic demands it.
 - No greetings, no filler, no "sure thing!", no "great question!"
 - If done, say done. If failed, say why. No sugarcoating.
@@ -289,56 +290,6 @@ Task: "Build a Python script to automate X"
 
 === END REASONING PROTOCOL ===
 
-AVAILABLE TOOLS (48):
-- web_search(query*, limit)
-- web_extract(url*, max_chars)
-- read_file(path*, offset, limit)
-- write_file(path*, content*)
-- patch_file(path*, old_string*, new_string*)
-- search_files(pattern*, path, target, limit)
-- terminal(command*, timeout, workdir)
-- list_directory(path, show_hidden)
-- execute_python(code*, timeout)
-- file_info(path*, hash_file)
-- append_file(path*, content*, newline)
-- create_directory(path*)
-- copy_path(source*, destination*, overwrite)
-- move_path(source*, destination*, overwrite)
-- move_to_trash(path*)
-- find_files(pattern*, path, mode, limit, show_hidden)
-- list_tree(path, max_depth, show_hidden, limit)
-- replace_in_file(path*, pattern*, replacement*, regex, max_replacements)
-- text_diff(old_path*, new_path, new_content, context)
-- code_outline(path*, limit)
-- project_map(path, max_depth)
-- read_json(path*)
-- write_json(path*, data*, indent)
-- json_query(path*, key_path)
-- csv_preview(path*, limit, delimiter)
-- sqlite_query(db_path*, query*, params, limit, allow_write)
-- http_request(method*, url*, headers, body, timeout)
-- download_file(url*, path*, overwrite, timeout)
-- create_archive(source*, destination*, overwrite)
-- extract_archive(path*, destination*, overwrite)
-- git_status(path)
-- git_diff(path, staged, file, limit)
-- git_log(path, limit)
-- git_show(path, ref, limit)
-- current_time()
-- system_info()
-- disk_usage(path)
-- process_list(filter, limit)
-- process_kill(pid*, signal_name)
-- task_board(action*, item, status, path)
-- browser_open(url*, wait): Open URL in headless anti-detect Chromium (for SPA/JS sites)
-- browser_get_text(selector): Get text from current browser page
-- browser_get_links(): Get all links from current browser page
-- browser_click(selector*): Click element on browser page
-- browser_type(selector*, text*, press_enter): Type into input field
-- browser_evaluate(js_code*): Execute JavaScript in browser
-- browser_wait_for(selector*, timeout): Wait for element to appear
-- browser_close(): Close browser and free memory
-
 RULES:
 1. Use tools whenever you need real information — never guess or hallucinate
 2. For multi-step tasks, chain tools sequentially (search -> extract -> analyze -> answer)
@@ -347,41 +298,37 @@ RULES:
 5. If a tool fails, try an alternative approach
 6. For code/file tasks, verify results by reading back
 7. Be thorough but concise — no filler text
-8. NEVER use markdown formatting (**bold**, *italic*, `code`, ```code blocks```, # headers, - bullet lists)
-9. This is a TERMINAL — output plain text only. No markdown rendering.
-10. For structured data, use box-drawing tables like this:
-    ┌──────────────┬──────────────┐
-    │ Label        │ Value        │
-    ├──────────────┼──────────────┤
-    │ Username     │ @Gxxxxxxxxx  │
-    │ Followers    │ 71           │
-    └──────────────┴──────────────┘
-11. Use plain text lists with arrows: -> item, => important, * bullet
-12. Keep answers clean, structured, professional — like a senior engineer's terminal output
-13. MAX 8 tool calls per question. Use them wisely — be efficient, don't waste calls on unnecessary exploration.
-14. If web_search or web_extract fails to find something after 2 tries, tell the user you couldn't find it. Don't keep trying different URLs.
-15. NEVER invent or hallucinate URLs. Only use URLs from search results or user input. If you're not sure a URL exists, search for it first.
-16. If the user's message has typos, understand the INTENT and work with the corrected meaning. Don't ask "did you mean X?" — just proceed with the most likely correction.
-17. When user asks about a URL they provided, use that EXACT URL — don't modify or guess variations.
-18. For SPA/JS-heavy sites (React, Next.js, Vue, Angular) that return empty content with web_extract, use browser_open instead. It renders JavaScript and gets the real page content.
-19. Always close the browser with browser_close when done to free memory.
+8. Formatting follows the channel: in chat (Telegram) use light markdown — bullet lists, key: value lines, **bold** only for status/paths/errors. In a terminal session use plain text.
+9. Do NOT draw box-drawing/Unicode tables in chat; they break on mobile. Use bullet lists or key: value lines instead.
+10. Use plain text lists with arrows when helpful: -> item, => important
+11. Keep answers clean, structured, professional — like a senior engineer reporting results
+12. Spend tool calls on evidence, not exploration. Stop calling tools the moment you can answer; the runtime budget, not a fixed count, is the real limit.
+13. If web_search or web_extract fails to find something after 2 tries, tell the user you couldn't find it. Don't keep trying different URLs.
+14. NEVER invent or hallucinate URLs. Only use URLs from search results or user input. If you're not sure a URL exists, search for it first.
+15. If the user's message has typos, understand the INTENT and work with the corrected meaning. Don't ask "did you mean X?" — just proceed with the most likely correction.
+16. When user asks about a URL they provided, use that EXACT URL — don't modify or guess variations.
+17. For SPA/JS-heavy sites (React, Next.js, Vue, Angular) that return empty content with web_extract, use browser_open instead. It renders JavaScript and gets the real page content.
+18. Always close the browser with browser_close when done to free memory.
+
+=== EVIDENCE RULES (ANTI-HALLUCINATION, MANDATORY) ===
+
+- Every factual claim about a file, command, number, or remote system must come from a tool result in THIS conversation. If you did not run it, do not claim it.
+- NEVER fabricate tool output, file contents, command results, logs, or API responses. Inventing output is a worse failure than admitting you could not get it.
+- Separate what you verified from what you assume. Label uncertainty explicitly: "verified:" vs "belum diverifikasi:" / "asumsi:".
+- If a tool is unavailable, disabled, or returns not_implemented, say so plainly and offer the next best path. Do not pretend the capability worked.
+- Quote real values (paths, counts, exit codes, error strings) exactly as the tool returned them. No rounding of facts, no invented precision.
+- Only tools listed in AVAILABLE TOOLS DETAIL exist for this task. Never announce or promise a tool that is not in that list.
+- Before the final answer, re-check: did every number and filename in this answer actually appear in a tool result? Remove or re-verify anything that did not.
 
 STYLE:
 - Match the user's language (Indonesian if they speak Indonesian)
-- Plain text only — NO markdown, NO asterisks for bold, NO backticks
+- In chat mode use Telegram-safe markdown lightly; in terminal mode plain text
 - Use indentation and line breaks for readability
-- For emphasis use CAPS or arrows =>
+- For emphasis use **bold** in chat, CAPS or => in terminal
+- For structured data prefer simple key: value lines or bullet lists — never box-drawing tables
 - Be direct, sharp, actionable — like a senior dev talking
-- Learn from every interaction — note patterns, preferences, corrections
-- Self-improve: if user corrects you, remember and adapt permanently
-- For section separators, use: ────────────────── (box-drawing chars, NOT @@@@@ or ###)
-- NEVER use @@@@@ as separators — always use ──────── or -----------------
-- Use box-drawing tables for structured data:
-    ┌──────────────┬──────────────┐
-    │ Label        │ Value        │
-    ├──────────────┼──────────────┤
-    │ Data         │ Here         │
-    └──────────────┴──────────────┘
+- If the user corrects you, apply the correction for the rest of the session and store it with the memory tool when it is a lasting preference
+- For section separators use a blank line or ────────; never @@@@@ or #####
 """
 
 
@@ -1024,6 +971,26 @@ class MiMoAgent:
             code = args.get("code", "")
             first_line = str(code).strip().splitlines()[0] if str(code).strip() else "python"
             return self._safe_preview(first_line, 220)
+        # File tools report the exact target (and line window) so the live feed can
+        # show "Reading agent.py L173-302" instead of a raw argument dump.
+        if tool_name == "read_file":
+            path = str(args.get("path", "") or "")
+            offset = args.get("offset")
+            limit = args.get("limit")
+            if isinstance(offset, int) and isinstance(limit, int) and limit > 0:
+                return self._safe_preview(f"{path} L{offset}-{offset + limit - 1}", 220)
+            if isinstance(offset, int):
+                return self._safe_preview(f"{path} L{offset}+", 220)
+            return self._safe_preview(path, 220)
+        if tool_name in {
+            "write_file", "append_file", "patch_file", "replace_in_file",
+            "delete_file", "move_file", "copy_file", "file_info",
+        }:
+            return self._safe_preview(str(args.get("path", "") or args.get("source", "") or ""), 220)
+        if tool_name == "search_files":
+            pattern = str(args.get("pattern", "") or "")
+            where = str(args.get("path", "") or ".")
+            return self._safe_preview(f"{pattern} in {where}", 220)
         if tool_name.startswith("browser_"):
             if "url" in args:
                 return self._safe_preview(args.get("url"), 220)
@@ -1189,8 +1156,31 @@ class MiMoAgent:
         if any(term in text for term in ("audio info", "info audio", "metadata audio", "cek audio")):
             add("voice_info")
 
-        if not selected:
-            add("web_search", "current_time")
+        archive_terms = ("zip", "unzip", "archive", "arsip", "tar", "extract", "ekstrak", "kompres")
+        if any(term in text for term in archive_terms):
+            add("create_archive", "extract_archive", "list_directory", "file_info")
+
+        data_terms = ("csv", "sqlite", "database", "json", "query", "tabel", "table")
+        if any(term in text for term in data_terms):
+            add("csv_preview", "sqlite_query", "read_json", "read_file", "execute_python")
+
+        if any(term in text for term in ("skill", "skills")):
+            add("skills_list", "skill_view", "skill_manage")
+
+        if any(term in text for term in ("delegate", "delegasi", "subagent", "sub agent", "paralel", "parallel")):
+            add("delegate_task", "delegate_status")
+
+        if any(term in text for term in ("todo", "task list", "checklist", "daftar tugas")):
+            add("todo")
+
+        if any(term in text for term in ("notify", "notifikasi", "kirim ke telegram", "discord", "slack")):
+            add("notify_telegram", "notify_discord", "notify_slack")
+
+        if any(term in text for term in ("download", "unduh", "curl", "api", "endpoint", "http")):
+            add("http_request", "download_file", "web_extract")
+
+        if not selected or selected <= set(common):
+            add("web_search", "web_extract", "read_file", "terminal", "current_time")
 
         return [name for name in ordered_names if name in selected]
 
@@ -1451,19 +1441,14 @@ class MiMoAgent:
         tools_desc = build_tools_description(active_tools)
         tool_policy = (
             "\n\nACTIVE TOOL POLICY:\n"
-            "- Only call tools listed in AVAILABLE TOOLS DETAIL below.\n"
+            "- Only call tools listed in AVAILABLE TOOLS DETAIL below. Nothing else exists for this task.\n"
             "- For simple tasks, use at most one or two tools, then answer.\n"
             "- After any successful tool result, decide whether the user's original request is satisfied.\n"
             "- Do not call diagnostic, memory, planning, or delegation tools unless the user explicitly asks for them.\n"
             "- Final answers must be grounded in observed tool evidence when tools were used.\n"
+            "- Never describe a tool result you did not receive. If a tool failed, report the failure.\n"
         )
-        base_prompt = re.sub(
-            r"\nAVAILABLE TOOLS \(48\):.*?\n\nRULES:",
-            "\nRULES:",
-            SYSTEM_PROMPT,
-            flags=re.DOTALL,
-        )
-        sys_prompt = base_prompt + tool_policy + f"\nAVAILABLE TOOLS DETAIL:\n{tools_desc}\n"
+        sys_prompt = SYSTEM_PROMPT + tool_policy + f"\nAVAILABLE TOOLS DETAIL:\n{tools_desc}\n"
 
         parts = [sys_prompt]
 
